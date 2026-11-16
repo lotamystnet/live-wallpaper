@@ -22,17 +22,42 @@
     -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);opacity:0;transition:opacity .5s;pointer-events:none}
   #toast.on{opacity:.9}
   button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
-  #btn{position:fixed;right:calc(env(safe-area-inset-right,0px) + 18px);bottom:calc(env(safe-area-inset-bottom,0px) + 22px);
-    width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.1);font-size:17px;opacity:.55;
-    -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+  #btn{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 22px);
+    padding:13px 20px;border-radius:99px;background:rgba(20,22,32,.55);font-size:15px;font-weight:600;white-space:nowrap;
+    border:1px solid rgba(255,255,255,.16);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);transition:opacity .6s}
+  #btn i{font-style:normal;margin-right:7px;opacity:.8}
+  #btn.idle{opacity:0;pointer-events:none}
   .embedded #btn{display:none}
   #gal{position:fixed;inset:0;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;
     background:rgba(4,5,10,.8);-webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px);
     padding:calc(env(safe-area-inset-top,0px) + 22px) 18px calc(env(safe-area-inset-bottom,0px) + 30px);box-sizing:border-box}
   #gal.on{display:block}
-  #gal header{display:flex;justify-content:space-between;align-items:center;max-width:1100px;margin:0 auto 6px}
-  #gal h1{font-size:26px;margin:0;letter-spacing:-.01em}
-  #x{background:rgba(255,255,255,.14);padding:9px 16px;border-radius:99px;font-weight:600;font-size:14px}
+  #gal header{display:flex;justify-content:space-between;align-items:center;gap:10px;max-width:1100px;margin:0 auto 4px;
+    position:sticky;top:0;z-index:2;padding:6px 0}
+  #tabs{display:flex;gap:2px;background:rgba(40,42,54,.92);border-radius:99px;padding:4px;min-width:0}
+  #tabs button{padding:9px 12px;border-radius:99px;font-weight:600;font-size:13.5px;opacity:.7;white-space:nowrap}
+  #tabs button.on{background:#fff;color:#000;opacity:1}
+  #gal section{max-width:1100px;margin:0 auto}
+  .note{font-size:13px;opacity:.6;margin:14px 0 12px;line-height:1.45}
+  .note a{color:inherit}
+  #install{background:rgba(255,255,255,.08);border-radius:16px;padding:14px 16px;margin:14px 0 0;font-size:14px;line-height:1.5}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 16px;background:rgba(255,255,255,.06);
+    margin-bottom:2px;font-size:15px;min-height:30px}
+  .row:first-of-type{border-radius:14px 14px 0 0}.row:last-of-type{border-radius:0 0 14px 14px}.row:only-of-type{border-radius:14px}
+  .row>span{flex:1;min-width:0}
+  .row small{display:block;opacity:.55;font-size:12.5px;margin-top:2px}
+  .sw{flex:none;width:50px;height:30px;border-radius:99px;background:rgba(255,255,255,.18);position:relative;transition:background .2s}
+  .sw::after{content:"";position:absolute;left:3px;top:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:transform .2s}
+  .sw.on{background:#34c759}.sw.on::after{transform:translateX(20px)}
+  .row input[type=range]{flex:0 1 150px;min-width:90px;accent-color:#fff;padding:0;background:none;margin:0}
+  .seg{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+  .seg button{padding:7px 11px;border-radius:99px;background:rgba(255,255,255,.1);font-size:13px;font-weight:600}
+  .seg button.on{background:#fff;color:#000}
+  #reset{display:block;margin:22px auto 0;background:rgba(255,255,255,.12);padding:10px 20px;border-radius:99px;font-weight:600;font-size:14px}
+  #phone{display:flex;gap:18px;align-items:center;background:rgba(255,255,255,.06);border-radius:14px;padding:16px;font-size:14.5px;line-height:1.5}
+  #phone img{width:132px;height:132px;border-radius:10px;flex:none;image-rendering:pixelated;background:#fff}
+  #phone ol{margin:6px 0 0;padding-left:20px}
+  #x{flex:none;background:rgba(255,255,255,.14);padding:9px 14px;border-radius:99px;font-weight:600;font-size:14px}
   #gal h2{font-size:12px;letter-spacing:.2em;text-transform:uppercase;opacity:.55;max-width:1100px;margin:22px auto 10px;font-weight:600}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--min,104px),1fr));gap:12px;max-width:1100px;margin:0 auto}
   .card{position:relative;border-radius:16px;overflow:hidden;background:#0b0d16;outline:2px solid transparent;outline-offset:2px;display:block;width:100%}
@@ -41,10 +66,10 @@
   .card img{display:block;width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
   .card.wh{aspect-ratio:var(--ar,1.5);background:#12141f}
   #gal h2 a{color:inherit;text-transform:none;letter-spacing:0;font-weight:400;margin-left:8px;text-decoration:underline}
-  input{font:inherit;color:#fff;-webkit-user-select:text;user-select:text;background:rgba(255,255,255,.09);border:0;outline:0;
+  input:not([type=range]){font:inherit;color:#fff;-webkit-user-select:text;user-select:text;background:rgba(255,255,255,.09);border:0;outline:0;
     border-radius:12px;padding:11px 14px;font-size:16px;min-width:0;box-sizing:border-box}
   input::placeholder{color:rgba(255,255,255,.45)}
-  #whf,#keyrow{display:flex;gap:8px;max-width:1100px;margin:0 auto 12px;flex-wrap:wrap;align-items:center}
+  #whf,#keyrow{display:flex;gap:8px;margin:0 0 12px;flex-wrap:wrap;align-items:center}
   #whq,#whk{flex:1 1 200px}
   #pur{display:flex;gap:6px}
   #pur button,#whks{padding:9px 13px;border-radius:99px;background:rgba(255,255,255,.09);font-size:13px;font-weight:600}
@@ -64,17 +89,31 @@
 <body>
 <canvas id="c"></canvas>
 <div id="toast"></div>
-<button id="btn" aria-label="Open gallery">◆</button>
+<button id="btn"><i>◆</i>Wallpapers</button>
 <div id="gal">
-  <header><h1>Gallery</h1><button id="x">Done</button></header>
-  <h2>Colour</h2><div class="grid" id="gc"></div>
-  <h2>Monochrome</h2><div class="grid" id="gm"></div>
-  <h2>Wallhaven<a href="https://wallhaven.cc" target="_blank" rel="noopener">images load from wallhaven.cc</a></h2>
-  <form id="whf"><input id="whq" type="search" placeholder="Search Wallhaven" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false">
-    <span id="pur"><button type="button">SFW</button><button type="button">Sketchy</button><button type="button">NSFW</button></span></form>
-  <div id="keyrow" hidden><input id="whk" type="password" placeholder="Your Wallhaven API key" autocomplete="off"><button id="whks" type="button">Save</button>
-    <p>NSFW results need your own Wallhaven API key: sign in at wallhaven.cc, open Settings → Account, and copy it here. It is kept on this device.</p></div>
-  <div id="chips"></div><div id="whmsg">Loading…</div><div class="grid" id="gw"></div><button id="more" hidden>Show more</button>
+  <header><nav id="tabs"><button data-t="anim">Animated</button><button data-t="wh">Wallhaven</button><button data-t="set">Settings</button></nav><button id="x">Done</button></header>
+  <section id="t-anim">
+    <div id="install" hidden><b>Make it full-screen:</b> tap the Share button in Safari, then <b>Add to Home Screen</b>, and open it from the new icon.</div>
+    <h2>Colour</h2><div class="grid" id="gc"></div>
+    <h2>Monochrome</h2><div class="grid" id="gm"></div>
+  </section>
+  <section id="t-wh" hidden>
+    <p class="note">Tap a picture to use it. Images load from <a href="https://wallhaven.cc" target="_blank" rel="noopener">wallhaven.cc</a>.</p>
+    <form id="whf"><input id="whq" type="search" placeholder="Search Wallhaven" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <span id="pur"><button type="button">SFW</button><button type="button">Sketchy</button><button type="button">NSFW</button></span></form>
+    <div id="keyrow" hidden><input id="whk" type="password" placeholder="Your Wallhaven API key" autocomplete="off"><button id="whks" type="button">Save</button>
+      <p>NSFW results need your own Wallhaven API key: sign in at wallhaven.cc, open Settings → Account, and copy it here. It is kept on this device.</p></div>
+    <div id="chips"></div><div id="whmsg">Loading…</div><div class="grid" id="gw"></div><button id="more" hidden>Show more</button>
+  </section>
+  <section id="t-set" hidden>
+    <div id="opts"></div>
+    <button id="reset">Reset to defaults</button>
+    <h2 id="phoneh">On your iPhone</h2>
+    <div id="phone"><img src="qr.png" alt="QR code for lotamystnet.github.io/live-wallpaper"><div>
+      <b>Get this as an app on your iPhone</b>
+      <ol><li>Point the iPhone camera at this code and tap the link (or open <b>lotamystnet.github.io/live-wallpaper</b> in Safari).</li>
+      <li>Tap the Share button, then <b>Add to Home Screen</b>.</li><li>Open it from the new home-screen icon.</li></ol></div></div>
+  </section>
 </div>
 <script>
 (() => {
@@ -744,13 +783,13 @@
           g.save(); g.beginPath(); g.arc(r.x, r.y, r.r + 20, 0, TAU); g.arc(r.x, r.y, Math.max(0, r.r - 20), 0, TAU, true); g.clip();
           zoomAt(r.x, r.y, 1 + Math.min(.09, r.s * .04)); g.restore();
         }
-        if (ptr.seen && ptr.glow > .05) {                        // lens under the pointer
+        if (opt.lens && ptr.seen && ptr.glow > .05) {            // lens under the pointer
           const R = Math.min(W, H) * .13;
           g.save(); g.beginPath(); g.arc(ptr.x, ptr.y, R, 0, TAU); g.clip(); zoomAt(ptr.x, ptr.y, 1 + .14 * ptr.glow); g.restore();
           g.strokeStyle = `rgba(255,255,255,${.3 * ptr.glow})`; g.lineWidth = 1.2; g.beginPath(); g.arc(ptr.x, ptr.y, R, 0, TAU); g.stroke();
         }
         const M = Math.max(W, H), gr = g.createRadialGradient(lx, ly, Math.min(W, H) * .25, lx, ly, M);
-        gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,.5)');
+        gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, `rgba(0,0,0,${opt.dim})`);
         g.fillStyle = gr; g.fillRect(0, 0, W, H);
         g.globalCompositeOperation = 'lighter'; drawRips();
       }
@@ -767,6 +806,21 @@
   const store = { get: (k = 'wp-mode') => { try { return localStorage.getItem(k); } catch (e) { return null; } },
                   set: (v, k = 'wp-mode') => { try { localStorage.setItem(k, v); } catch (e) {} } };
   const wipe = () => { g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.fillStyle = `rgb(${BG})`; g.fillRect(0, 0, W, H); };
+
+  // ── options (Settings tab) ──
+  const DEF = { speed: 1, power: 1, cursor: true, ripples: true, tilt: true, burst: true, appsw: true, drift: true, hue: 205, shuffle: 'off', lens: true, dim: .5 };
+  const opt = Object.assign({}, DEF);
+  try { Object.assign(opt, JSON.parse((embedded ? window.__opt : store.get('wp-opt')) || '{}')); } catch (e) {}
+  const saveOpt = () => { const j = JSON.stringify(opt); store.set(j, 'wp-opt'); post({ opt: j }); };
+  let pool = [], lastShuffle = Date.now();                       // pictures the shuffle option picks from
+  try { pool = JSON.parse(store.get('wp-pool') || '[]'); } catch (e) {}
+  function shuffleNext() {
+    lastShuffle = Date.now();
+    if (!mode.photo) return setMode((mi + 1) % PHOTO, true);
+    const others = pool.filter(it => !photo.item || it.id !== photo.item.id); if (!others.length) return;
+    const it = others[Math.random() * others.length | 0]; photo.set(it); store.set(JSON.stringify(it), 'wp-img'); setMode(PHOTO, true);
+  }
+  setInterval(() => { const m = +opt.shuffle; if (m && Date.now() - lastShuffle >= m * 60000 && !gal.classList.contains('on')) shuffleNext(); }, 20000);
 
   function setMode(i, quiet) {
     mi = ((i % MODES.length) + MODES.length) % MODES.length; mode = MODES[mi]; store.set(mi);
@@ -790,14 +844,23 @@
     modes: MODES.map(m => m.name),
     setMode, next: () => setMode((mi + 1) % PHOTO),
     apply(i, it) { if (it) photo.set(it); setMode(i, true); },
-    move(x, y) { if (!ptr.seen) { ptr.x = x; ptr.y = y; ptr.seen = true; } ptr.tx = x; ptr.ty = y; ptr.glow = 1; },
-    tap(x, y, s = 1) { rip.push({ x, y, r: 0, s: 1.6 * s }); hueT += 14; mode.tap && mode.tap(x, y, s); },
-    bloom() {                       // unlock / wake / app reopened
-      api.tap(W / 2, H / 2, 2); setTimeout(() => api.tap(W / 2, H / 2, 1.3), 220);
+    move(x, y) {
+      if (!opt.cursor || opt.power <= 0) { ptr.seen = false; return; }
+      if (!ptr.seen) { ptr.x = x; ptr.y = y; ptr.seen = true; } ptr.tx = x; ptr.ty = y; ptr.glow = Math.min(1, opt.power);
+    },
+    tap(x, y, s = 1, sys) {         // sys = not a click or touch (unlock burst, app switch)
+      if ((!sys && !opt.ripples) || opt.power <= 0) return;
+      rip.push({ x, y, r: 0, s: 1.6 * s * opt.power }); hueT += 14; mode.tap && mode.tap(x, y, s);
+    },
+    bloom(first) {                  // unlock / wake / app reopened
+      if (!first && opt.shuffle === 'unlock') shuffleNext();
+      if (!opt.burst) return;
+      api.tap(W / 2, H / 2, 2, true); setTimeout(() => api.tap(W / 2, H / 2, 1.3, true), 220);
       flash = 1; hueT += 60;
     },
     shift() {                       // something changed on screen (app or desktop switch)
-      hueT += 45; api.tap(rnd(0, W), rnd(0, H), .7); mode.shift && mode.shift();
+      if (!opt.appsw) return;
+      hueT += 45; api.tap(rnd(0, W), rnd(0, H), .7, true); mode.shift && mode.shift();
     }
   };
 
@@ -865,7 +928,11 @@
     for (const it of arr) {
       const el = document.createElement('button'); el.className = 'card wh';
       const im = document.createElement('img'); im.loading = 'lazy'; im.alt = ''; im.referrerPolicy = 'no-referrer'; im.src = it.t;
-      el.append(im); el.addEventListener('click', () => { photo.set(it); store.set(JSON.stringify(it), 'wp-img'); setMode(PHOTO); closeGallery(); });
+      el._it = it; el.append(im);
+      el.addEventListener('click', () => {
+        pool = [...gw.children].map(e => e._it).slice(0, 72); store.set(JSON.stringify(pool), 'wp-pool');
+        photo.set(it); store.set(JSON.stringify(it), 'wp-img'); setMode(PHOTO); closeGallery();
+      });
       gw.append(el);
     }
   }
@@ -901,9 +968,11 @@
   function refresh() { view.q !== null && whq.value.trim() ? runSearch(whq.value.trim()) : cat && showCat(catI); }
   async function loadCat() {
     if (cat) { if (catFor !== (W > H)) refresh(); return; }
+    if (loadCat.busy) return; loadCat.busy = true;
     for (const url of embedded ? [CAT_URL] : ['wallhaven.json', CAT_URL]) {
       try { const r = await fetch(url); if (r.ok) { cat = await r.json(); break; } } catch (e) {}
     }
+    loadCat.busy = false;
     if (!cat) { msg('Could not reach the Wallhaven list. Check your connection and reopen the gallery.'); return; }
     cat.cats.forEach((c, i) => { const b = document.createElement('button'); b.textContent = c.name; b.addEventListener('click', () => { whq.value = ''; showCat(i); }); chips.append(b); });
     showCat(0);
@@ -921,11 +990,97 @@
   pur.hidden = !canSearch; paintPur();
   more.addEventListener('click', showMore);
 
-  function openGallery() { gal.classList.add('on'); queueThumbs(); loadCat(); }
+  // tabs
+  const tabs = [...document.querySelectorAll('#tabs button')]; let tab = 'anim';
+  function setTab(name) {
+    tab = name; tabs.forEach(b => b.classList.toggle('on', b.dataset.t === name));
+    for (const n of ['anim', 'wh', 'set']) document.getElementById('t-' + n).hidden = n !== name;
+    gal.scrollTop = 0; if (name === 'wh') loadCat();
+  }
+  tabs.forEach(b => b.addEventListener('click', () => setTab(b.dataset.t)));
+
+  // settings rows
+  const pointerWord = embedded ? 'cursor' : 'touch';
+  const SCHEMA = [
+    ['Motion'],
+    ['speed', 'Speed', 'range', .25, 2, .05],
+    ['power', 'Reaction strength', 'range', 0, 2.5, .05, 'How hard the wallpaper responds to you. Zero turns reactions off.'],
+    ['Interactions'],
+    ['cursor', embedded ? 'Follow the cursor' : 'React to touch and swipes', 'bool'],
+    ['ripples', embedded ? 'Ripples when you click' : 'Ripples when you tap', 'bool'],
+    ['tilt', 'React to tilting the phone', 'bool', !embedded],
+    ['burst', embedded ? 'Burst when the Mac unlocks or wakes' : 'Burst when you reopen the app', 'bool'],
+    ['appsw', 'React when you switch apps or desktops', 'bool', embedded],
+    ['Colour'],
+    ['drift', 'Colours drift over time', 'bool', true, 'Applies to the colour wallpapers.'],
+    ['hue', 'Fixed colour', 'range', 0, 360, 1],
+    ['Shuffle'],
+    ['shuffle', 'Change wallpaper automatically', 'seg', [['off', 'Off'], ['unlock', embedded ? 'On unlock' : 'On reopen'], ['10', '10 min'], ['60', 'Hourly']],
+      'Cycles the animated wallpapers, or the pictures from your last Wallhaven list.'],
+    ['Wallhaven pictures'],
+    ['lens', `Magnifying lens under the ${pointerWord}`, 'bool'],
+    ['dim', 'Darken the edges', 'range', 0, .9, .05],
+  ];
+  const opts = document.getElementById('opts');
+  function buildSettings() {
+    opts.textContent = '';
+    for (const [k, label, kind, a, b, step, help] of SCHEMA) {
+      if (!label) { const h = document.createElement('h2'); h.textContent = k; opts.append(h); continue; }
+      if (kind === 'bool' && a === false) continue;
+      if (k === 'hue' && opt.drift) continue;
+      const row = document.createElement('div'); row.className = 'row';
+      const sp = document.createElement('span'); sp.textContent = label;
+      const hint = kind === 'range' ? help : kind === 'seg' ? b : b;
+      if (typeof hint === 'string') { const sm = document.createElement('small'); sm.textContent = hint; sp.append(sm); }
+      row.append(sp);
+      if (kind === 'bool') {
+        const sw = document.createElement('button'); sw.className = 'sw' + (opt[k] ? ' on' : ''); sw.setAttribute('role', 'switch'); sw.setAttribute('aria-label', label);
+        sw.addEventListener('click', () => {
+          opt[k] = !opt[k]; saveOpt();
+          if (k === 'tilt' && opt.tilt) askTilt();
+          if (k === 'drift') { if (!opt.drift) opt.hue = ((hue % 360) + 360) % 360 | 0; buildSettings(); } else sw.classList.toggle('on', opt[k]);
+        });
+        row.append(sw);
+      } else if (kind === 'range') {
+        const r = document.createElement('input'); r.type = 'range'; r.min = a; r.max = b; r.step = step; r.value = opt[k]; r.setAttribute('aria-label', label);
+        r.addEventListener('input', () => { opt[k] = +r.value; saveOpt(); });
+        row.append(r);
+      } else {
+        const seg = document.createElement('div'); seg.className = 'seg';
+        for (const [v, name] of a) {
+          const bt = document.createElement('button'); bt.textContent = name; bt.classList.toggle('on', opt[k] === v);
+          bt.addEventListener('click', () => { opt[k] = v; lastShuffle = Date.now(); saveOpt(); [...seg.children].forEach(x => x.classList.toggle('on', x === bt)); });
+          seg.append(bt);
+        }
+        row.append(seg);
+      }
+      opts.append(row);
+    }
+  }
+  const askTilt = () => { const DO = window.DeviceOrientationEvent; if (DO && DO.requestPermission) DO.requestPermission().catch(() => {}); };
+  document.getElementById('reset').addEventListener('click', () => { Object.assign(opt, DEF); saveOpt(); buildSettings(); });
+  buildSettings();
+
+  // "get it on your phone" help: QR on a computer, share-sheet steps in iPhone Safari, nothing once installed
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent), installed = navigator.standalone === true || matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
+  document.getElementById('install').hidden = !(isIOS && !installed);
+  document.getElementById('phone').hidden = document.getElementById('phoneh').hidden = isIOS || (installed && !embedded);
+
+  function openGallery(name) {
+    gal.classList.add('on'); setTab(typeof name === 'string' ? name : mode.photo ? 'wh' : tab === 'set' ? 'anim' : tab);
+    queueThumbs(); loadCat();
+  }
   function closeGallery() { if (gal.classList.contains('on')) { gal.classList.remove('on'); post({ closed: true }); } }
-  document.getElementById('btn').addEventListener('click', openGallery);
+  const btn = document.getElementById('btn'); let idleT = 0;
+  const wake = () => { btn.classList.remove('idle'); clearTimeout(idleT); idleT = setTimeout(() => btn.classList.add('idle'), 4500); };
+  btn.addEventListener('click', openGallery);
   document.getElementById('x').addEventListener('click', closeGallery);
   api.gallery = openGallery;
+  if (!embedded && !store.get('wp-hint')) {                      // first run: say how to change the wallpaper
+    store.set('1', 'wp-hint');
+    setTimeout(() => { toast.textContent = 'Tap “Wallpapers” to choose'; toast.classList.add('on'); setTimeout(() => toast.classList.remove('on'), 4500); }, 1200);
+  }
+  wake();
 
   function frame(now) {
     requestAnimationFrame(frame);
@@ -935,12 +1090,13 @@
       if (!queue.length) { wipe(); mode.init(); }
       last = now; return;
     }
-    const dt = clamp((now - last) / 16.67 || 1, .2, 2.5); last = now;
+    const dt = clamp((now - last) / 16.67 || 1, .2, 2.5) * opt.speed; last = now;
     t += .0011 * dt;
-    hueT += .012 * dt; hue += (hueT - hue) * .025 * dt;
+    if (opt.drift) hueT += .012 * dt; else hueT = opt.hue;
+    hue += (hueT - hue) * (opt.drift ? .025 : .12) * dt;
     const ox = ptr.x, oy = ptr.y;
     ptr.x += (ptr.tx - ptr.x) * .4; ptr.y += (ptr.ty - ptr.y) * .4;
-    ptr.vx = ptr.x - ox; ptr.vy = ptr.y - oy; ptr.sp = Math.hypot(ptr.vx, ptr.vy);
+    ptr.vx = (ptr.x - ox) * opt.power; ptr.vy = (ptr.y - oy) * opt.power; ptr.sp = Math.hypot(ptr.vx, ptr.vy);
     ptr.glow *= Math.pow(.99, dt);
     stepRips(dt);
     mode.draw(dt);
@@ -953,18 +1109,15 @@
 
   // ── browser input: mouse, touch, tilt, unlock ──
   const touches = new Set();
-  c.addEventListener('pointermove', e => api.move(e.clientX, e.clientY));
+  c.addEventListener('pointermove', e => { wake(); api.move(e.clientX, e.clientY); });
   c.addEventListener('pointerdown', e => {
-    touches.add(e.pointerId);
+    touches.add(e.pointerId); wake();
     if (touches.size === 2) { openGallery(); return; }           // two-finger tap = gallery
     ptr.seen = false; api.move(e.clientX, e.clientY); api.tap(e.clientX, e.clientY);
   });
   const up = e => touches.delete(e.pointerId);
   addEventListener('pointerup', up); addEventListener('pointercancel', up);
-  addEventListener('click', () => {                              // iOS only allows tilt after a tap
-    const DO = window.DeviceOrientationEvent;
-    if (DO && DO.requestPermission) DO.requestPermission().catch(() => {});
-  }, { once: true });
+  addEventListener('click', () => { if (opt.tilt) askTilt(); }, { once: true });   // iOS only allows tilt after a tap
   addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT') { if (e.key === 'Escape') e.target.blur(); return; }
     if (e.key === 'ArrowRight' || e.key === ' ') api.next();
@@ -973,7 +1126,7 @@
     else if (e.key === 'Escape') closeGallery();
   });
   addEventListener('deviceorientation', e => {
-    if (e.gamma == null) return;
+    if (e.gamma == null || !opt.tilt) { grav.x = grav.y = 0; return; }
     grav.x = clamp(e.gamma / 35, -1, 1); grav.y = clamp((e.beta - 40) / 35, -1, 1);
   });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { last = performance.now(); api.bloom(); } });
@@ -987,7 +1140,7 @@
   if (cards[mi]) cards[mi].el.classList.add('sel');
   resize();
   requestAnimationFrame(frame);
-  setTimeout(api.bloom, 300);
+  setTimeout(() => api.bloom(true), 300);
 })();
 </script>
 </body>
