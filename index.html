@@ -22,18 +22,23 @@
     -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);opacity:0;transition:opacity .5s;pointer-events:none}
   #toast.on{opacity:.9}
   button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
-  #btn{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 22px);
-    padding:13px 20px;border-radius:99px;background:rgba(20,22,32,.55);font-size:15px;font-weight:600;white-space:nowrap;
-    border:1px solid rgba(255,255,255,.16);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);transition:opacity .6s}
-  #btn i{font-style:normal;margin-right:7px;opacity:.8}
-  #btn.idle{opacity:0;pointer-events:none}
-  .embedded #btn{display:none}
+  #bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 22px);display:flex;gap:8px;transition:opacity .6s}
+  #bar button{padding:13px 18px;border-radius:99px;background:rgba(20,22,32,.55);font-size:15px;font-weight:600;white-space:nowrap;
+    border:1px solid rgba(255,255,255,.16);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+  #bar i{font-style:normal;margin-right:7px;opacity:.8}
+  #bar.idle{opacity:0;pointer-events:none}
+  #toast.long{text-transform:none;letter-spacing:0;font-size:14px;line-height:1.35;text-align:center;border-radius:16px;max-width:80vw;width:max-content}
+  .help{background:rgba(255,255,255,.06);border-radius:14px;padding:16px;font-size:14.5px;line-height:1.55}
+  .help ol{margin:6px 0 12px;padding-left:20px}.help p{margin:0 0 10px}
+  .help .line{display:flex;gap:8px;margin:8px 0 12px}.help .line input{flex:1}
+  .help .line button{flex:none;background:#fff;color:#000;padding:0 16px;border-radius:12px;font-weight:600;font-size:14px}
+  .embedded #bar,.embedded #real{display:none}
   #gal{position:fixed;inset:0;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;
     background:rgba(4,5,10,.8);-webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px);
     padding:calc(env(safe-area-inset-top,0px) + 22px) 18px calc(env(safe-area-inset-bottom,0px) + 30px);box-sizing:border-box}
   #gal.on{display:block}
   #gal header{display:flex;justify-content:space-between;align-items:center;gap:10px;max-width:1100px;margin:0 auto 4px;
-    position:sticky;top:0;z-index:2;padding:6px 0}
+    position:sticky;top:0;z-index:2;padding:8px 18px;margin:-8px -18px 4px;max-width:none;background:rgba(6,7,13,.94)}
   #tabs{display:flex;gap:2px;background:rgba(40,42,54,.92);border-radius:99px;padding:4px;min-width:0}
   #tabs button{padding:9px 12px;border-radius:99px;font-weight:600;font-size:13.5px;opacity:.7;white-space:nowrap}
   #tabs button.on{background:#fff;color:#000;opacity:1}
@@ -54,7 +59,7 @@
   .seg button{padding:7px 11px;border-radius:99px;background:rgba(255,255,255,.1);font-size:13px;font-weight:600}
   .seg button.on{background:#fff;color:#000}
   #reset{display:block;margin:22px auto 0;background:rgba(255,255,255,.12);padding:10px 20px;border-radius:99px;font-weight:600;font-size:14px}
-  #phone{display:flex;gap:18px;align-items:center;background:rgba(255,255,255,.06);border-radius:14px;padding:16px;font-size:14.5px;line-height:1.5}
+  #phone{display:flex;flex-wrap:wrap;gap:18px;align-items:center;background:rgba(255,255,255,.06);border-radius:14px;padding:16px;font-size:14.5px;line-height:1.5}
   #phone img{width:132px;height:132px;border-radius:10px;flex:none;image-rendering:pixelated;background:#fff}
   #phone ol{margin:6px 0 0;padding-left:20px}
   #x{flex:none;background:rgba(255,255,255,.14);padding:9px 14px;border-radius:99px;font-weight:600;font-size:14px}
@@ -89,7 +94,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="toast"></div>
-<button id="btn"><i>◆</i>Wallpapers</button>
+<div id="bar"><button id="btn"><i>◆</i>Wallpapers</button><button id="save"><i>↓</i>Save</button></div>
 <div id="gal">
   <header><nav id="tabs"><button data-t="anim">Animated</button><button data-t="wh">Wallhaven</button><button data-t="set">Settings</button></nav><button id="x">Done</button></header>
   <section id="t-anim">
@@ -108,6 +113,22 @@
   <section id="t-set" hidden>
     <div id="opts"></div>
     <button id="reset">Reset to defaults</button>
+    <div id="real">
+      <h2>Use as your real phone wallpaper</h2>
+      <div class="help">
+        <p>iPhones don’t allow live wallpapers, but any of these can be your real wallpaper as a still picture.</p>
+        <p><b>One picture.</b> Close this, tap <b>↓ Save</b> on the wallpaper you want and choose Save Image. Then open the Settings app → Wallpaper → Add New Wallpaper → Photos.</p>
+        <p><b>A new Wallhaven picture automatically.</b></p>
+        <ol>
+          <li>Type a theme if you want one, then copy the link:
+            <div class="line"><input id="rq" type="search" placeholder="Theme, e.g. space (optional)" autocomplete="off" autocapitalize="off"><button id="rcopy" type="button">Copy link</button></div></li>
+          <li>Open the <b>Shortcuts</b> app, tap <b>+</b>, add the action <b>Get Contents of URL</b> and paste the link into it.</li>
+          <li>Add the action <b>Set Wallpaper Photo</b> under it. Tap its small arrow and turn off <b>Show Preview</b>.</li>
+          <li>To run it on its own: Automation tab → <b>+</b> → Time of Day → Run Immediately → choose your shortcut.</li>
+        </ol>
+        <p style="opacity:.6;margin:0">The link follows your SFW and Sketchy filter. Running the shortcut picks a different picture each time.</p>
+      </div>
+    </div>
     <h2 id="phoneh">On your iPhone</h2>
     <div id="phone"><img src="qr.png" alt="QR code for lotamystnet.github.io/live-wallpaper"><div>
       <b>Get this as an app on your iPhone</b>
@@ -831,8 +852,8 @@
   }
 
   function resize() {
-    D = Math.min(window.devicePixelRatio || 1, 1.5);
     W = innerWidth; H = innerHeight;
+    D = Math.min(window.devicePixelRatio || 1, W < 600 ? 2 : 1.5);    // phones get a sharper canvas (used for saved pictures)
     c.width = Math.round(W * D); c.height = Math.round(H * D);
     g.setTransform(D, 0, 0, D, 0, 0);
     wipe(); mode.init(); thumbsFor = '';
@@ -1071,8 +1092,50 @@
     queueThumbs(); loadCat();
   }
   function closeGallery() { if (gal.classList.contains('on')) { gal.classList.remove('on'); post({ closed: true }); } }
-  const btn = document.getElementById('btn'); let idleT = 0;
-  const wake = () => { btn.classList.remove('idle'); clearTimeout(idleT); idleT = setTimeout(() => btn.classList.add('idle'), 4500); };
+  const btn = document.getElementById('btn'), bar = document.getElementById('bar'); let idleT = 0;
+  const wake = () => { bar.classList.remove('idle'); clearTimeout(idleT); idleT = setTimeout(() => bar.classList.add('idle'), 4500); };
+  const say = (text, ms = 2600) => { toast.textContent = text; toast.classList.add('on', 'long'); clearTimeout(toastT); toastT = setTimeout(() => toast.classList.remove('on'), ms); };
+
+  // Save the current wallpaper as a still picture (iPhone: share sheet → Save Image)
+  let saveFile = null, saveKey = null;
+  async function makeFile() {
+    if (mode.photo && photo.item) {                              // the full Wallhaven picture
+      const r = await fetch(photo.item.p, { referrerPolicy: 'no-referrer' }); if (!r.ok) throw new Error('fetch');
+      const b = await r.blob(), png = b.type.includes('png');
+      return new File([b], `wallhaven-${photo.item.id}.${png ? 'png' : 'jpg'}`, { type: png ? 'image/png' : 'image/jpeg' });
+    }
+    const k = clamp((window.devicePixelRatio || 1) / D, 1, 2), out = document.createElement('canvas');   // snapshot, scaled to the screen's real pixels
+    out.width = Math.round(c.width * k); out.height = Math.round(c.height * k);
+    const og = out.getContext('2d'); og.imageSmoothingQuality = 'high'; og.drawImage(c, 0, 0, out.width, out.height);
+    const b = await new Promise(res => out.toBlob(res, 'image/jpeg', .95));
+    return new File([b], `wallpaper-${mode.name.toLowerCase()}.jpg`, { type: 'image/jpeg' });
+  }
+  async function savePicture() {
+    wake();
+    const key = mode.photo && photo.item ? photo.item.id : 'snap';
+    try {
+      if (!saveFile || saveKey !== key) { if (key !== 'snap') say('Getting the full picture…', 20000); saveFile = await makeFile(); saveKey = key; }
+      const f = saveFile;
+      if (navigator.canShare && navigator.canShare({ files: [f] })) {
+        try { await navigator.share({ files: [f] }); say('Saved? Set it in Settings → Wallpaper → Add New Wallpaper → Photos', 6000); }
+        catch (e) { if (e.name === 'NotAllowedError') return say('Picture ready. Tap Save again', 5000); toast.classList.remove('on'); }
+      } else {
+        const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000); say('Picture downloaded');
+      }
+      if (key === 'snap') saveFile = null;
+    } catch (e) { say('Couldn’t save this picture. Try again'); }
+  }
+  document.getElementById('save').addEventListener('click', savePicture);
+
+  // Link for the Shortcuts app: each visit redirects to one random Wallhaven picture
+  document.getElementById('rcopy').addEventListener('click', async e => {
+    const ps = new URLSearchParams({ purity: `${whs.p[0] || !whs.p[1] ? 1 : 0}${whs.p[1] ? 1 : 0}0` }), q = document.getElementById('rq').value.trim();
+    if (q) ps.set('q', q);
+    const url = PROXY + 'random?' + ps;
+    try { await navigator.clipboard.writeText(url); e.target.textContent = 'Copied'; setTimeout(() => e.target.textContent = 'Copy link', 1800); }
+    catch (err) { prompt('Copy this link:', url); }
+  });
   btn.addEventListener('click', openGallery);
   document.getElementById('x').addEventListener('click', closeGallery);
   api.gallery = openGallery;
