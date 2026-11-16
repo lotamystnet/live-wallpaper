@@ -41,6 +41,16 @@
   .card img{display:block;width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
   .card.wh{aspect-ratio:var(--ar,1.5);background:#12141f}
   #gal h2 a{color:inherit;text-transform:none;letter-spacing:0;font-weight:400;margin-left:8px;text-decoration:underline}
+  input{font:inherit;color:#fff;-webkit-user-select:text;user-select:text;background:rgba(255,255,255,.09);border:0;outline:0;
+    border-radius:12px;padding:11px 14px;font-size:16px;min-width:0;box-sizing:border-box}
+  input::placeholder{color:rgba(255,255,255,.45)}
+  #whf,#keyrow{display:flex;gap:8px;max-width:1100px;margin:0 auto 12px;flex-wrap:wrap;align-items:center}
+  #whq,#whk{flex:1 1 200px}
+  #pur{display:flex;gap:6px}
+  #pur button,#whks{padding:9px 13px;border-radius:99px;background:rgba(255,255,255,.09);font-size:13px;font-weight:600}
+  #pur button.on{background:#fff;color:#000}
+  #keyrow p{flex-basis:100%;margin:0;font-size:12.5px;opacity:.6;line-height:1.4}
+  [hidden]{display:none!important}
   #chips{display:flex;gap:8px;overflow-x:auto;max-width:1100px;margin:0 auto 12px;padding-bottom:2px;scrollbar-width:none;touch-action:pan-x}
   #chips::-webkit-scrollbar{display:none}
   #chips button{flex:none;padding:8px 14px;border-radius:99px;background:rgba(255,255,255,.09);font-size:13px;font-weight:600}
@@ -60,6 +70,10 @@
   <h2>Colour</h2><div class="grid" id="gc"></div>
   <h2>Monochrome</h2><div class="grid" id="gm"></div>
   <h2>Wallhaven<a href="https://wallhaven.cc" target="_blank" rel="noopener">images load from wallhaven.cc</a></h2>
+  <form id="whf"><input id="whq" type="search" placeholder="Search Wallhaven" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <span id="pur"><button type="button">SFW</button><button type="button">Sketchy</button><button type="button">NSFW</button></span></form>
+  <div id="keyrow" hidden><input id="whk" type="password" placeholder="Your Wallhaven API key" autocomplete="off"><button id="whks" type="button">Save</button>
+    <p>NSFW results need your own Wallhaven API key: sign in at wallhaven.cc, open Settings → Account, and copy it here. It is kept on this device.</p></div>
   <div id="chips"></div><div id="whmsg">Loading…</div><div class="grid" id="gw"></div><button id="more" hidden>Show more</button>
 </div>
 <script>
@@ -821,32 +835,85 @@
   // Wallhaven browser: wallhaven.json is a list of links; the images come straight from wallhaven.cc
   const CAT_URL = 'https://lotamystnet.github.io/live-wallpaper/wallhaven.json';
   const gw = document.getElementById('gw'), chips = document.getElementById('chips'), more = document.getElementById('more'), whmsg = document.getElementById('whmsg');
-  let cat = null, catI = 0, shown = 0, catFor = '';
-  const catList = () => cat.cats[catI][W > H ? 'land' : 'port'];
-  function showMore() {
-    const list = catList();
-    for (const it of list.slice(shown, shown + 12)) {
+  const PROXY = '';                                            // relay address that enables search in the web version
+  const canSearch = embedded || !!PROXY;
+  const whq = document.getElementById('whq'), pur = document.getElementById('pur'), keyrow = document.getElementById('keyrow'), whk = document.getElementById('whk');
+  const whs = { p: [1, 0, 0], key: '' };
+  try { Object.assign(whs, JSON.parse((embedded ? window.__wh : store.get('wp-wh')) || '{}')); } catch (e) {}
+  const saveWh = () => { const j = JSON.stringify(whs); store.set(j, 'wp-wh'); post({ wh: j }); };
+  const sfwOnly = () => whs.p.join('') === '100';
+  const msg = m => { whmsg.textContent = m || ''; whmsg.hidden = !m; };
+  let cat = null, catI = 0, shown = 0, catFor = '', view = { q: null, page: 0, last: 1, busy: false };
+
+  async function whSearch(q, page) {                            // one page of live results from Wallhaven
+    const ps = new URLSearchParams({ purity: whs.p.join(''), categories: '111', ratios: W > H ? 'landscape' : 'portrait', page });
+    if (q) { ps.set('q', q); ps.set('sorting', 'relevance'); } else { ps.set('sorting', 'toplist'); ps.set('topRange', '1M'); }
+    let txt;
+    if (embedded) txt = await webkit.messageHandlers.wh.postMessage({ query: ps.toString(), key: whs.key });
+    else {
+      const r = await fetch(PROXY + '?' + ps, { headers: whs.key ? { 'X-API-Key': whs.key } : {} });
+      if (r.status === 401) throw new Error('key'); if (!r.ok) throw new Error('failed'); txt = await r.text();
+    }
+    const d = JSON.parse(txt);
+    return { items: d.data.map(w => ({ id: w.id, p: w.path, t: w.thumbs.original, u: w.url, r: w.resolution })), last: d.meta.last_page };
+  }
+  function addCards(arr) {
+    for (const it of arr) {
       const el = document.createElement('button'); el.className = 'card wh';
       const im = document.createElement('img'); im.loading = 'lazy'; im.alt = ''; im.referrerPolicy = 'no-referrer'; im.src = it.t;
       el.append(im); el.addEventListener('click', () => { photo.set(it); store.set(JSON.stringify(it), 'wp-img'); setMode(PHOTO); closeGallery(); });
       gw.append(el);
     }
+  }
+  async function loadPage() {
+    if (view.busy) return; const v = view; v.busy = true; msg(v.page ? '' : 'Searching…'); more.hidden = true;
+    try {
+      const r = await whSearch(v.q, v.page + 1); if (v !== view) return;
+      v.page++; v.last = r.last; addCards(r.items);
+      msg(!r.items.length && v.page === 1 ? 'No results.' : ''); more.hidden = v.page >= v.last;
+    } catch (e) {
+      if (v !== view) return;
+      if (String(e && e.message || e).includes('key')) { msg(whs.key ? 'Wallhaven rejected that API key.' : 'NSFW results need your Wallhaven API key.'); keyrow.hidden = false; }
+      else msg('Search failed. Check your connection and try again.');
+    }
+    v.busy = false;
+  }
+  function runSearch(q) {
+    if (!canSearch) { msg('Search isn’t available in the web version yet — it needs a relay. The categories below still work.'); return; }
+    view = { q, page: 0, last: 1, busy: false }; gw.textContent = ''; loadPage();
+  }
+  function showMore() {
+    if (view.q !== null) return loadPage();
+    const list = cat.cats[catI][W > H ? 'land' : 'port'];
+    addCards(list.slice(shown, shown + 12));
     shown = Math.min(list.length, shown + 12); more.hidden = shown >= list.length;
   }
   function showCat(i) {
-    catI = i; shown = 0; gw.textContent = ''; catFor = W > H;
-    [...chips.children].forEach((b, k) => b.classList.toggle('on', k === i)); showMore();
+    catI = i; catFor = W > H; [...chips.children].forEach((b, k) => b.classList.toggle('on', k === i)); msg('');
+    if (sfwOnly() || !canSearch) { view = { q: null, page: 0, last: 1, busy: false }; shown = 0; gw.textContent = ''; showMore(); }
+    else runSearch(cat.cats[i].q);
   }
+  function refresh() { view.q !== null && whq.value.trim() ? runSearch(whq.value.trim()) : cat && showCat(catI); }
   async function loadCat() {
-    if (cat) { if (catFor !== (W > H)) showCat(catI); return; }
+    if (cat) { if (catFor !== (W > H)) refresh(); return; }
     for (const url of embedded ? [CAT_URL] : ['wallhaven.json', CAT_URL]) {
       try { const r = await fetch(url); if (r.ok) { cat = await r.json(); break; } } catch (e) {}
     }
-    if (!cat) { whmsg.textContent = 'Could not reach the Wallhaven list. Check your connection and reopen the gallery.'; return; }
-    whmsg.hidden = true;
-    cat.cats.forEach((c, i) => { const b = document.createElement('button'); b.textContent = c.name; b.addEventListener('click', () => showCat(i)); chips.append(b); });
+    if (!cat) { msg('Could not reach the Wallhaven list. Check your connection and reopen the gallery.'); return; }
+    cat.cats.forEach((c, i) => { const b = document.createElement('button'); b.textContent = c.name; b.addEventListener('click', () => { whq.value = ''; showCat(i); }); chips.append(b); });
     showCat(0);
   }
+  document.getElementById('whf').addEventListener('submit', e => {
+    e.preventDefault(); whq.blur(); const q = whq.value.trim(); if (!q) return showCat(catI);
+    [...chips.children].forEach(b => b.classList.remove('on')); runSearch(q);
+  });
+  const paintPur = () => { [...pur.children].forEach((b, i) => b.classList.toggle('on', !!whs.p[i])); keyrow.hidden = !(whs.p[2] && !whs.key); };
+  [...pur.children].forEach((b, i) => b.addEventListener('click', () => {
+    whs.p[i] = whs.p[i] ? 0 : 1; if (!whs.p.some(Boolean)) whs.p[0] = 1;
+    saveWh(); paintPur(); if (!(whs.p[2] && !whs.key)) refresh();
+  }));
+  document.getElementById('whks').addEventListener('click', () => { whs.key = whk.value.trim(); whk.value = ''; saveWh(); paintPur(); refresh(); });
+  pur.hidden = !canSearch; paintPur();
   more.addEventListener('click', showMore);
 
   function openGallery() { gal.classList.add('on'); queueThumbs(); loadCat(); }
@@ -894,6 +961,7 @@
     if (DO && DO.requestPermission) DO.requestPermission().catch(() => {});
   }, { once: true });
   addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') { if (e.key === 'Escape') e.target.blur(); return; }
     if (e.key === 'ArrowRight' || e.key === ' ') api.next();
     else if (e.key === 'ArrowLeft') setMode(mi - 1);
     else if (e.key === 'g') gal.classList.contains('on') ? closeGallery() : openGallery();
