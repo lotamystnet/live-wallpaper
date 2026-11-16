@@ -38,6 +38,15 @@
   .card{position:relative;border-radius:16px;overflow:hidden;background:#0b0d16;outline:2px solid transparent;outline-offset:2px;display:block;width:100%}
   .card.sel{outline-color:#fff}
   .card canvas{display:block;width:100%;height:auto}
+  .card img{display:block;width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+  .card.wh{aspect-ratio:var(--ar,1.5);background:#12141f}
+  #gal h2 a{color:inherit;text-transform:none;letter-spacing:0;font-weight:400;margin-left:8px;text-decoration:underline}
+  #chips{display:flex;gap:8px;overflow-x:auto;max-width:1100px;margin:0 auto 12px;padding-bottom:2px;scrollbar-width:none;touch-action:pan-x}
+  #chips::-webkit-scrollbar{display:none}
+  #chips button{flex:none;padding:8px 14px;border-radius:99px;background:rgba(255,255,255,.09);font-size:13px;font-weight:600}
+  #chips button.on{background:#fff;color:#000}
+  #more{display:block;margin:16px auto 0;background:rgba(255,255,255,.14);padding:10px 20px;border-radius:99px;font-weight:600;font-size:14px}
+  #whmsg{max-width:1100px;margin:0 auto;opacity:.6;font-size:14px}
   .card span{position:absolute;left:0;right:0;bottom:0;padding:22px 10px 9px;font-size:12.5px;font-weight:600;text-align:left;
     background:linear-gradient(transparent,rgba(0,0,0,.75))}
 </style>
@@ -50,6 +59,8 @@
   <header><h1>Gallery</h1><button id="x">Done</button></header>
   <h2>Colour</h2><div class="grid" id="gc"></div>
   <h2>Monochrome</h2><div class="grid" id="gm"></div>
+  <h2>Wallhaven<a href="https://wallhaven.cc" target="_blank" rel="noopener">images load from wallhaven.cc</a></h2>
+  <div id="chips"></div><div id="whmsg">Loading…</div><div class="grid" id="gw"></div><button id="more" hidden>Show more</button>
 </div>
 <script>
 (() => {
@@ -679,19 +690,75 @@
     };
   })();
 
+  // ═════════════════════════ WALLHAVEN ═════════════════════════
+
+  // ── a picked image: it shifts with the pointer or tilt, the cursor is a magnifying lens, taps send refracting ripples ──
+  const photo = (() => {
+    let item = null, img = null, buf = null, full = false, zoom = 1, lx = 0, ly = 0;
+    const fit = () => {                                         // pre-scale the image to cover the screen plus a margin
+      if (!img) { buf = null; return; }
+      const bw = Math.round(W * D * 1.12), bh = Math.round(H * D * 1.12);
+      buf = document.createElement('canvas'); buf.width = bw; buf.height = bh;
+      const k = Math.max(bw / img.naturalWidth, bh / img.naturalHeight), w = img.naturalWidth * k, h = img.naturalHeight * k;
+      buf.getContext('2d').drawImage(img, (bw - w) / 2, (bh - h) / 2, w, h);
+    };
+    return {
+      name: 'Wallhaven', photo: true,
+      get item() { return item; },
+      set(it) {
+        item = it; img = null; buf = null; full = false;
+        const a = new Image(); a.onload = () => { if (item === it && !full) { img = a; fit(); } }; a.src = it.t;
+        const b = new Image(); b.onload = () => { if (item === it) { full = true; img = b; fit(); zoom = 1.18; } }; b.src = it.p;
+      },
+      init() { lx = W / 2; ly = H / 2; fit(); },
+      tap(x, y, s) { if (s >= 2) zoom = 1.25; },
+      draw(dt) {
+        g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
+        if (!buf) {
+          g.fillStyle = `rgb(${BG})`; g.fillRect(0, 0, W, H);
+          g.fillStyle = 'rgba(255,255,255,.5)'; g.font = '600 14px -apple-system,system-ui,sans-serif'; g.textAlign = 'center';
+          g.fillText(item ? 'Loading image…' : 'Pick an image from the gallery', W / 2, H / 2); return;
+        }
+        zoom += (1 - zoom) * .04 * dt;
+        lx += ((ptr.seen ? ptr.x : W / 2) + grav.x * W * .5 - lx) * .06 * dt; ly += ((ptr.seen ? ptr.y : H / 2) + grav.y * H * .5 - ly) * .06 * dt;
+        const dw = W * 1.12 * zoom, dh = H * 1.12 * zoom;
+        const dx = (W - dw) / 2 - clamp(lx / W - .5, -.5, .5) * W * .1, dy = (H - dh) / 2 - clamp(ly / H - .5, -.5, .5) * H * .1;
+        g.drawImage(buf, dx, dy, dw, dh);
+        const zoomAt = (x, y, k) => { g.translate(x, y); g.scale(k, k); g.translate(-x, -y); g.drawImage(buf, dx, dy, dw, dh); };
+        for (const r of rip) {                                   // ripples bend the picture as they pass
+          if (r.r < 10) continue;
+          g.save(); g.beginPath(); g.arc(r.x, r.y, r.r + 20, 0, TAU); g.arc(r.x, r.y, Math.max(0, r.r - 20), 0, TAU, true); g.clip();
+          zoomAt(r.x, r.y, 1 + Math.min(.09, r.s * .04)); g.restore();
+        }
+        if (ptr.seen && ptr.glow > .05) {                        // lens under the pointer
+          const R = Math.min(W, H) * .13;
+          g.save(); g.beginPath(); g.arc(ptr.x, ptr.y, R, 0, TAU); g.clip(); zoomAt(ptr.x, ptr.y, 1 + .14 * ptr.glow); g.restore();
+          g.strokeStyle = `rgba(255,255,255,${.3 * ptr.glow})`; g.lineWidth = 1.2; g.beginPath(); g.arc(ptr.x, ptr.y, R, 0, TAU); g.stroke();
+        }
+        const M = Math.max(W, H), gr = g.createRadialGradient(lx, ly, Math.min(W, H) * .25, lx, ly, M);
+        gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,.5)');
+        g.fillStyle = gr; g.fillRect(0, 0, W, H);
+        g.globalCompositeOperation = 'lighter'; drawRips();
+      }
+    };
+  })();
+
   // ═════════════════════════ engine ═════════════════════════
-  const MODES = [flow, liquid, lava, shards, tunnel, stars, kaleido, sequins, gem, halftone, moire, ridges];
+  const MODES = [flow, liquid, lava, shards, tunnel, stars, kaleido, sequins, gem, halftone, moire, ridges, photo];
+  const PHOTO = MODES.indexOf(photo);
+  const post = m => { try { webkit.messageHandlers.wp.postMessage(m); } catch (e) {} };   // tells the Mac app
   const embedded = window.__mode != null;                       // running inside the Mac app
   if (embedded) document.documentElement.classList.add('embedded');
   let mi = 0, toastT = 0;
-  const store = { get: () => { try { return localStorage.getItem('wp-mode'); } catch (e) { return null; } },
-                  set: v => { try { localStorage.setItem('wp-mode', v); } catch (e) {} } };
+  const store = { get: (k = 'wp-mode') => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+                  set: (v, k = 'wp-mode') => { try { localStorage.setItem(k, v); } catch (e) {} } };
   const wipe = () => { g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.fillStyle = `rgb(${BG})`; g.fillRect(0, 0, W, H); };
 
   function setMode(i, quiet) {
     mi = ((i % MODES.length) + MODES.length) % MODES.length; mode = MODES[mi]; store.set(mi);
     rip.length = 0; wipe(); mode.init();
-    cards.forEach((cd, k) => cd.el.classList.toggle('sel', k === mi));
+    cards.forEach((cd, k) => cd && cd.el.classList.toggle('sel', k === mi));
+    post({ mode: mi, img: photo.item ? JSON.stringify(photo.item) : '' });
     if (!quiet) { toast.textContent = mode.name; toast.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => toast.classList.remove('on'), 1400); }
   }
 
@@ -707,7 +774,8 @@
   // Hooks: the Mac app calls these; the page calls them itself for touch and mouse.
   const api = window.wallpaper = {
     modes: MODES.map(m => m.name),
-    setMode, next: () => setMode(mi + 1),
+    setMode, next: () => setMode((mi + 1) % PHOTO),
+    apply(i, it) { if (it) photo.set(it); setMode(i, true); },
     move(x, y) { if (!ptr.seen) { ptr.x = x; ptr.y = y; ptr.seen = true; } ptr.tx = x; ptr.ty = y; ptr.glow = 1; },
     tap(x, y, s = 1) { rip.push({ x, y, r: 0, s: 1.6 * s }); hueT += 14; mode.tap && mode.tap(x, y, s); },
     bloom() {                       // unlock / wake / app reopened
@@ -721,6 +789,7 @@
 
   // ── gallery ──
   const cards = MODES.map((m, i) => {
+    if (m.photo) return null;
     const el = document.createElement('button'); el.className = 'card';
     const cv = document.createElement('canvas'), sp = document.createElement('span'); sp.textContent = m.name;
     el.append(cv, sp); el.addEventListener('click', () => { setMode(i); closeGallery(); });
@@ -732,8 +801,9 @@
     const key = W + 'x' + H; if (thumbsFor === key) return; thumbsFor = key;
     const tw = W > H ? 420 : 250, th = Math.round(tw * H / W);
     document.querySelectorAll('.grid').forEach(el => el.style.setProperty('--min', W > H ? '200px' : '104px'));
-    cards.forEach(cd => { cd.cv.width = tw; cd.cv.height = th; });
-    queue = MODES.map((_, i) => i);
+    cards.forEach(cd => { if (cd) { cd.cv.width = tw; cd.cv.height = th; } });
+    queue = MODES.map((_, i) => i).filter(i => cards[i]);
+    document.getElementById('gw').style.setProperty('--ar', W / H);
   }
   function renderThumb(i) {                                     // run the wallpaper briefly into its card
     const m = MODES[i], sg = g, sW = W, sH = H, sm = mode, st = t, sp = Object.assign({}, ptr), sr = rip.splice(0);
@@ -748,8 +818,39 @@
     }
     g = sg; W = sW; H = sH; mode = sm; t = st; Object.assign(ptr, sp); rip.length = 0; rip.push(...sr);
   }
-  function openGallery() { gal.classList.add('on'); queueThumbs(); }
-  function closeGallery() { gal.classList.remove('on'); }
+  // Wallhaven browser: wallhaven.json is a list of links; the images come straight from wallhaven.cc
+  const CAT_URL = 'https://lotamystnet.github.io/live-wallpaper/wallhaven.json';
+  const gw = document.getElementById('gw'), chips = document.getElementById('chips'), more = document.getElementById('more'), whmsg = document.getElementById('whmsg');
+  let cat = null, catI = 0, shown = 0, catFor = '';
+  const catList = () => cat.cats[catI][W > H ? 'land' : 'port'];
+  function showMore() {
+    const list = catList();
+    for (const it of list.slice(shown, shown + 12)) {
+      const el = document.createElement('button'); el.className = 'card wh';
+      const im = document.createElement('img'); im.loading = 'lazy'; im.alt = ''; im.referrerPolicy = 'no-referrer'; im.src = it.t;
+      el.append(im); el.addEventListener('click', () => { photo.set(it); store.set(JSON.stringify(it), 'wp-img'); setMode(PHOTO); closeGallery(); });
+      gw.append(el);
+    }
+    shown = Math.min(list.length, shown + 12); more.hidden = shown >= list.length;
+  }
+  function showCat(i) {
+    catI = i; shown = 0; gw.textContent = ''; catFor = W > H;
+    [...chips.children].forEach((b, k) => b.classList.toggle('on', k === i)); showMore();
+  }
+  async function loadCat() {
+    if (cat) { if (catFor !== (W > H)) showCat(catI); return; }
+    for (const url of embedded ? [CAT_URL] : ['wallhaven.json', CAT_URL]) {
+      try { const r = await fetch(url); if (r.ok) { cat = await r.json(); break; } } catch (e) {}
+    }
+    if (!cat) { whmsg.textContent = 'Could not reach the Wallhaven list. Check your connection and reopen the gallery.'; return; }
+    whmsg.hidden = true;
+    cat.cats.forEach((c, i) => { const b = document.createElement('button'); b.textContent = c.name; b.addEventListener('click', () => showCat(i)); chips.append(b); });
+    showCat(0);
+  }
+  more.addEventListener('click', showMore);
+
+  function openGallery() { gal.classList.add('on'); queueThumbs(); loadCat(); }
+  function closeGallery() { if (gal.classList.contains('on')) { gal.classList.remove('on'); post({ closed: true }); } }
   document.getElementById('btn').addEventListener('click', openGallery);
   document.getElementById('x').addEventListener('click', closeGallery);
   api.gallery = openGallery;
@@ -806,8 +907,11 @@
   addEventListener('resize', resize);
 
   const start = embedded ? +window.__mode : location.hash.length > 1 ? +location.hash.slice(1) - 1 : +(store.get() || 0);
-  mi = clamp(start | 0, 0, MODES.length - 1); mode = MODES[mi];
-  cards[mi].el.classList.add('sel');
+  mi = clamp(start | 0, 0, MODES.length - 1);
+  try { const it = JSON.parse((embedded ? window.__img : store.get('wp-img')) || 'null'); if (it && it.p) photo.set(it); } catch (e) {}
+  if (mi === PHOTO && !photo.item) mi = 0;
+  mode = MODES[mi];
+  if (cards[mi]) cards[mi].el.classList.add('sel');
   resize();
   requestAnimationFrame(frame);
   setTimeout(api.bloom, 300);
