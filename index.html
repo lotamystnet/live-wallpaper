@@ -851,8 +851,12 @@
     let txt;
     if (embedded) txt = await webkit.messageHandlers.wh.postMessage({ query: ps.toString(), key: whs.key });
     else {
-      const r = await fetch(PROXY + '?' + ps, { headers: whs.key ? { 'X-API-Key': whs.key } : {} });
-      if (r.status === 401) throw new Error('key'); if (!r.ok) throw new Error('failed'); txt = await r.text();
+      let r;
+      for (let n = 0; n < 3; n++) {                              // Wallhaven sometimes answers "too busy"; wait and retry
+        r = await fetch(PROXY + '?' + ps, { headers: whs.key ? { 'X-API-Key': whs.key } : {} });
+        if (r.status !== 429) break; await new Promise(res => setTimeout(res, 1500 * (n + 1)));
+      }
+      if (r.status === 401) throw new Error('key'); if (r.status === 429) throw new Error('busy'); if (!r.ok) throw new Error('failed'); txt = await r.text();
     }
     const d = JSON.parse(txt);
     return { items: d.data.map(w => ({ id: w.id, p: w.path, t: w.thumbs.original, u: w.url, r: w.resolution })), last: d.meta.last_page };
@@ -874,6 +878,7 @@
     } catch (e) {
       if (v !== view) return;
       if (String(e && e.message || e).includes('key')) { msg(whs.key ? 'Wallhaven rejected that API key.' : 'NSFW results need your Wallhaven API key.'); keyrow.hidden = false; }
+      else if (String(e && e.message).includes('busy')) { msg('Wallhaven is busy right now. Try again in a moment.'); more.hidden = v.page === 0; }
       else msg('Search failed. Check your connection and try again.');
     }
     v.busy = false;
