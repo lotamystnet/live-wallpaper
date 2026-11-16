@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Wallpaper">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#05060d">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="manifest" href="manifest.json">
+<title>Live Wallpaper</title>
+<style>
+  html,body{margin:0;width:100%;height:100%;background:#05060d;overflow:hidden;position:fixed;inset:0;
+    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;
+    font-family:-apple-system,system-ui,sans-serif;color:#fff}
+  #c{position:fixed;left:0;top:0;width:100vw;height:100vh;display:block;touch-action:none}
+  #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 84px);transform:translateX(-50%);
+    font:600 13px/1 -apple-system,system-ui,sans-serif;letter-spacing:.18em;text-transform:uppercase;
+    background:rgba(255,255,255,.1);padding:10px 16px;border-radius:99px;
+    -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);opacity:0;transition:opacity .5s;pointer-events:none}
+  #toast.on{opacity:.9}
+  button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+  #btn{position:fixed;right:calc(env(safe-area-inset-right,0px) + 18px);bottom:calc(env(safe-area-inset-bottom,0px) + 22px);
+    width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.1);font-size:17px;opacity:.55;
+    -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+  .embedded #btn{display:none}
+  #gal{position:fixed;inset:0;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;
+    background:rgba(4,5,10,.8);-webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px);
+    padding:calc(env(safe-area-inset-top,0px) + 22px) 18px calc(env(safe-area-inset-bottom,0px) + 30px);box-sizing:border-box}
+  #gal.on{display:block}
+  #gal header{display:flex;justify-content:space-between;align-items:center;max-width:1100px;margin:0 auto 6px}
+  #gal h1{font-size:26px;margin:0;letter-spacing:-.01em}
+  #x{background:rgba(255,255,255,.14);padding:9px 16px;border-radius:99px;font-weight:600;font-size:14px}
+  #gal h2{font-size:12px;letter-spacing:.2em;text-transform:uppercase;opacity:.55;max-width:1100px;margin:22px auto 10px;font-weight:600}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--min,104px),1fr));gap:12px;max-width:1100px;margin:0 auto}
+  .card{position:relative;border-radius:16px;overflow:hidden;background:#0b0d16;outline:2px solid transparent;outline-offset:2px;display:block;width:100%}
+  .card.sel{outline-color:#fff}
+  .card canvas{display:block;width:100%;height:auto}
+  .card span{position:absolute;left:0;right:0;bottom:0;padding:22px 10px 9px;font-size:12.5px;font-weight:600;text-align:left;
+    background:linear-gradient(transparent,rgba(0,0,0,.75))}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="toast"></div>
+<button id="btn" aria-label="Open gallery">◆</button>
+<div id="gal">
+  <header><h1>Gallery</h1><button id="x">Done</button></header>
+  <h2>Colour</h2><div class="grid" id="gc"></div>
+  <h2>Monochrome</h2><div class="grid" id="gm"></div>
+</div>
+<script>
+(() => {
+  const c = document.getElementById('c'), toast = document.getElementById('toast'), gal = document.getElementById('gal');
+  let g = c.getContext('2d');
+  const BG = '5,6,13', TAU = Math.PI * 2, PI = Math.PI;
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+  const GREY = Array.from({ length: 101 }, (_, i) => `hsl(0,0%,${i}%)`);
+  let W = 0, H = 0, D = 1, t = 0, last = 0, flash = 0, hue = 205, hueT = 205;
+  const ptr = { x: 0, y: 0, tx: 0, ty: 0, vx: 0, vy: 0, sp: 0, glow: 0, seen: false };
+  const rip = [], grav = { x: 0, y: 0 }, F = [0, 0];
+  let mode;
+
+  // Push from expanding shockwave rings, written into out[0], out[1].
+  const ripForce = (x, y, out) => {
+    out[0] = out[1] = 0;
+    for (const r of rip) {
+      const dx = x - r.x, dy = y - r.y, d = Math.sqrt(dx * dx + dy * dy) || 1, off = Math.abs(d - r.r);
+      if (off < 50) { const k = (1 - off / 50) * r.s; out[0] += dx / d * k; out[1] += dy / d * k; }
+    }
+    return out;
+  };
+  const stepRips = dt => {
+    for (let i = rip.length - 1; i >= 0; i--) {
+      const r = rip[i]; r.r += 10 * dt; r.s *= Math.pow(.975, dt);
+      if (r.s < .03 || r.r > W + H) rip.splice(i, 1);
+    }
+  };
+  const drawRips = () => {
+    for (const r of rip) {
+      g.strokeStyle = mode.mono ? `rgba(255,255,255,${Math.min(.5, r.s * .18)})` : `hsla(${hue + 60},90%,72%,${Math.min(.5, r.s * .18)})`;
+      g.lineWidth = 1.5; g.beginPath(); g.arc(r.x, r.y, r.r, 0, TAU); g.stroke();
+    }
+  };
+  const black = () => { g.globalCompositeOperation = 'source-over'; g.fillStyle = '#000'; g.fillRect(0, 0, W, H); };
+
+  // ═════════════════════════ COLOUR ═════════════════════════
+
+  // ── FLOW — particle currents ──
+  const flow = (() => {
+    let P = []; const B = 5, R = 190;
+    const spawn = p => { p.x = p.px = rnd(0, W); p.y = p.py = rnd(0, H); p.vx = p.vy = 0; p.life = rnd(150, 600); return p; };
+    return {
+      name: 'Flow',
+      init() { P = []; const n = clamp(W * H / 520 | 0, 700, 4200); for (let i = 0; i < n; i++) P.push(spawn({ b: i % B })); },
+      draw(dt) {
+        const damp = Math.pow(.94, dt);
+        for (const p of P) {
+          p.px = p.x; p.py = p.y;
+          const a = (Math.sin(p.x * .0021 + t * 3) + Math.cos(p.y * .0027 - t * 2) + Math.sin((p.x + p.y) * .0013 + t * 4)) * PI;
+          let ax = Math.cos(a) * .13 + grav.x * .09, ay = Math.sin(a) * .13 + grav.y * .09;
+          const dx = p.x - ptr.x, dy = p.y - ptr.y, d2 = dx * dx + dy * dy;
+          if (ptr.seen && d2 < R * R && d2 > 1) {
+            const d = Math.sqrt(d2), f = 1 - d / R;
+            ax += ptr.vx * f * .09 - dy / d * f * .35 + dx / d * f * .22;
+            ay += ptr.vy * f * .09 + dx / d * f * .35 + dy / d * f * .22;
+          }
+          ripForce(p.x, p.y, F); ax += F[0] * .9; ay += F[1] * .9;
+          p.vx = (p.vx + ax * dt) * damp; p.vy = (p.vy + ay * dt) * damp;
+          p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
+          if (p.life < 0 || p.x < -20 || p.x > W + 20 || p.y < -20 || p.y > H + 20) spawn(p);
+        }
+        g.globalCompositeOperation = 'source-over';
+        g.fillStyle = `rgba(${BG},0.055)`; g.fillRect(0, 0, W, H);
+        g.globalCompositeOperation = 'lighter';
+        g.lineWidth = 1.3; g.lineCap = 'round';
+        for (let b = 0; b < B; b++) {
+          g.strokeStyle = `hsla(${hue + b * 24},85%,${58 + b * 3}%,0.5)`;
+          g.beginPath();
+          for (const p of P) if (p.b === b) { g.moveTo(p.px, p.py); g.lineTo(p.x, p.y); }
+          g.stroke();
+        }
+        drawRips();
+      }
+    };
+  })();
+
+  // ── LIQUID — low-poly water surface ──
+  const liquid = (() => {
+    let cell, cols, rows, h, v, Z, PX, PY;
+    const poke = (x, y, s, rad) => {
+      const gx = Math.round(x / cell) + 1, gy = Math.round(y / cell) + 1;
+      for (let j = -rad; j <= rad; j++) for (let i = -rad; i <= rad; i++) {
+        const X = gx + i, Y = gy + j; if (X < 1 || Y < 1 || X >= cols - 1 || Y >= rows - 1) continue;
+        const f = 1 - Math.hypot(i, j) / (rad + 1); if (f > 0) v[Y * cols + X] -= s * f;
+      }
+    };
+    return {
+      name: 'Liquid',
+      init() {
+        cell = Math.max(W < 500 ? 26 : 38, Math.round(Math.max(W, H) / 40));
+        cols = Math.ceil(W / cell) + 3; rows = Math.ceil(H / cell) + 4;
+        h = new Float32Array(cols * rows); v = new Float32Array(cols * rows);
+        Z = new Float32Array(cols * rows); PX = new Float32Array(cols * rows); PY = new Float32Array(cols * rows);
+      },
+      tap(x, y, s) { poke(x, y, 26 * s, 2); },
+      draw(dt) {
+        if (ptr.seen && ptr.sp > .3) poke(ptr.x, ptr.y, Math.min(ptr.sp, 45) * .22, 1);
+        if (Math.random() < .035 * dt) poke(rnd(0, W), rnd(0, H), rnd(3, 9), 1);
+        for (let y = 1; y < rows - 1; y++) for (let x = 1; x < cols - 1; x++) {
+          const i = y * cols + x;
+          v[i] = (v[i] + ((h[i - 1] + h[i + 1] + h[i - cols] + h[i + cols]) * .25 - h[i]) * .7) * .988;
+        }
+        const tiltX = grav.x * 10, tiltY = grav.y * 10;
+        for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+          const i = y * cols + x; h[i] = (h[i] + v[i]) * .998;
+          const wx = (x - 1) * cell, wy = (y - 1) * cell;
+          const z = h[i] + 5 * Math.sin(wx * .004 + t * 9) + 5 * Math.cos(wy * .005 - t * 7) + 3 * Math.sin((wx + wy) * .008 + t * 13);
+          Z[i] = z; PX[i] = wx + tiltX * z * .1; PY[i] = wy - z * 1.5 + tiltY * z * .1;
+        }
+        g.globalCompositeOperation = 'source-over'; g.lineWidth = 1; g.lineJoin = 'round';
+        const tri = (a, b, d, slope, cx, cy) => {
+          const m = (Z[a] + Z[b] + Z[d]) / 3;
+          g.fillStyle = g.strokeStyle = `hsl(${(hue + cx / cols * 70 + cy / rows * 30 + m * 1.6) | 0},68%,${clamp(17 + slope * 2 + m * .5, 4, 82) | 0}%)`;
+          g.beginPath(); g.moveTo(PX[a], PY[a]); g.lineTo(PX[b], PY[b]); g.lineTo(PX[d], PY[d]); g.closePath();
+          g.fill(); g.stroke();
+        };
+        for (let y = 0; y < rows - 1; y++) for (let x = 0; x < cols - 1; x++) {
+          const a = y * cols + x, b = a + 1, d = a + cols, e = d + 1;
+          if ((x + y) & 1) { tri(a, b, d, Z[b] - Z[a] + Z[d] - Z[a], x, y); tri(b, e, d, Z[e] - Z[d] + Z[e] - Z[b], x, y); }
+          else { tri(a, b, e, Z[b] - Z[a] + Z[e] - Z[b], x, y); tri(a, e, d, Z[e] - Z[d] + Z[d] - Z[a], x, y); }
+        }
+      }
+    };
+  })();
+
+  // ── LAVA — morphing blobs that chase the pointer ──
+  const lava = (() => {
+    let Bl = [];
+    return {
+      name: 'Lava',
+      init() {
+        Bl = []; const m = Math.min(W, H), n = W * H > 900000 ? 11 : 8;
+        for (let i = 0; i < n; i++) Bl.push({ x: rnd(.15, .85) * W, y: rnd(.15, .85) * H, vx: 0, vy: 0, R: m * rnd(.11, .22), ph: rnd(0, TAU), i });
+      },
+      draw(dt) {
+        const damp = Math.pow(.975, dt);
+        for (const b of Bl) {
+          const wa = Math.sin(t * 5 + b.ph) * 3 + b.ph;
+          let ax = Math.cos(wa) * .03 + grav.x * .12 + (W / 2 - b.x) / W * .02, ay = Math.sin(wa) * .03 + grav.y * .12 + (H / 2 - b.y) / H * .02;
+          if (ptr.seen && ptr.glow > .03) {
+            const dx = ptr.x - b.x, dy = ptr.y - b.y, d = Math.hypot(dx, dy) || 1;
+            const k = (d > b.R * 1.1 ? .07 : -.25) * ptr.glow;   // drawn in from afar, shy up close
+            ax += dx / d * k; ay += dy / d * k;
+          }
+          for (const o of Bl) if (o !== b) {
+            const dx = b.x - o.x, dy = b.y - o.y, d = Math.hypot(dx, dy) || 1, lim = (b.R + o.R) * .75;
+            if (d < lim) { const k = (1 - d / lim) * .12; ax += dx / d * k; ay += dy / d * k; }
+          }
+          ripForce(b.x, b.y, F); ax += F[0] * .45; ay += F[1] * .45;
+          const m = b.R * .5;
+          if (b.x < m) ax += (m - b.x) * .01; if (b.x > W - m) ax -= (b.x - W + m) * .01;
+          if (b.y < m) ay += (m - b.y) * .01; if (b.y > H - m) ay -= (b.y - H + m) * .01;
+          b.vx = (b.vx + ax * dt) * damp; b.vy = (b.vy + ay * dt) * damp;
+          b.x += b.vx * dt; b.y += b.vy * dt;
+        }
+        g.globalCompositeOperation = 'source-over';
+        g.fillStyle = `rgb(${BG})`; g.fillRect(0, 0, W, H);
+        g.globalCompositeOperation = 'screen';
+        for (const b of Bl) {
+          const hh = hue + b.i * 31, R = b.R;
+          let gr = g.createRadialGradient(b.x, b.y, R * .5, b.x, b.y, R * 1.9);
+          gr.addColorStop(0, `hsla(${hh},90%,55%,.22)`); gr.addColorStop(1, 'hsla(0,0%,0%,0)');
+          g.fillStyle = gr; g.fillRect(b.x - R * 2, b.y - R * 2, R * 4, R * 4);
+          const sp = Math.hypot(b.vx, b.vy), va = Math.atan2(b.vy, b.vx);
+          const pdx = ptr.x - b.x, pdy = ptr.y - b.y, pd = Math.hypot(pdx, pdy), pa = Math.atan2(pdy, pdx);
+          const dent = ptr.seen ? clamp(1 - pd / (R * 1.8), 0, 1) * ptr.glow : 0;
+          g.beginPath();
+          for (let k = 0; k <= 56; k++) {
+            const th = k / 56 * TAU;
+            let r = R * (1 + .1 * Math.sin(3 * th + b.ph + t * 9) + .07 * Math.sin(5 * th - t * 13 + b.ph * 2)
+              + Math.min(.3, sp * .05) * Math.cos(th - va) ** 2);
+            const c1 = Math.cos(th - pa); if (c1 > 0) r *= 1 - .4 * dent * c1 * c1 * c1;
+            const x = b.x + Math.cos(th) * r, y = b.y + Math.sin(th) * r;
+            k ? g.lineTo(x, y) : g.moveTo(x, y);
+          }
+          gr = g.createRadialGradient(b.x - R * .35, b.y - R * .35, R * .05, b.x, b.y, R * 1.3);
+          gr.addColorStop(0, `hsla(${hh + 25},95%,70%,.95)`);
+          gr.addColorStop(.6, `hsla(${hh},85%,45%,.75)`);
+          gr.addColorStop(1, `hsla(${hh - 30},80%,25%,.35)`);
+          g.fillStyle = gr; g.fill();
+        }
+        g.globalCompositeOperation = 'lighter'; drawRips();
+      }
+    };
+  })();
+
+  // ── SHARDS — neon polygons you can fling ──
+  const shards = (() => {
+    let S = [];
+    const poly = (s, scale, rot) => {
+      const r = s.size * scale;
+      if (!s.sides) { g.moveTo(s.x + r, s.y); g.arc(s.x, s.y, r, 0, TAU); return; }
+      for (let k = 0; k <= s.sides; k++) {
+        const a = rot + k / s.sides * TAU, x = s.x + Math.cos(a) * r, y = s.y + Math.sin(a) * r;
+        k ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+    };
+    return {
+      name: 'Shards',
+      init() {
+        S = []; const n = clamp(W * H / 24000 | 0, 22, 85), kinds = [3, 3, 4, 5, 6, 0];
+        for (let i = 0; i < n; i++) {
+          const z = rnd(.35, 1);
+          S.push({ x: rnd(0, W), y: rnd(0, H), vx: 0, vy: 0, wx: rnd(-.35, .35) * z, wy: rnd(-.35, .35) * z,
+            a: rnd(0, TAU), spin: 0, bs: rnd(-.008, .008), size: rnd(12, 58) * z, sides: kinds[i % kinds.length],
+            z, fill: Math.random() < .4, echo: Math.random() < .45, ho: rnd(0, 110) });
+        }
+      },
+      draw(dt) {
+        const R = 220;
+        for (const s of S) {
+          let ax = (s.wx - s.vx) * .012 + grav.x * .08 * s.z, ay = (s.wy - s.vy) * .012 + grav.y * .08 * s.z;
+          const dx = s.x - ptr.x, dy = s.y - ptr.y, d = Math.hypot(dx, dy) || 1;
+          if (ptr.seen && d < R) {
+            const f = 1 - d / R;
+            ax += ptr.vx * f * .13 + dx / d * f * .28 * ptr.glow; ay += ptr.vy * f * .13 + dy / d * f * .28 * ptr.glow;
+            s.spin += (ptr.vx * dy - ptr.vy * dx) / d * f * .0016;
+          }
+          ripForce(s.x, s.y, F); ax += F[0] * 1.4; ay += F[1] * 1.4; s.spin += (F[0] - F[1]) * .012;
+          s.vx += ax * dt; s.vy += ay * dt; s.x += s.vx * dt; s.y += s.vy * dt;
+          s.spin += (s.bs - s.spin) * .015 * dt; s.a += s.spin * dt;
+          const m = s.size + 10;
+          if (s.x < -m) s.x = W + m; else if (s.x > W + m) s.x = -m;
+          if (s.y < -m) s.y = H + m; else if (s.y > H + m) s.y = -m;
+        }
+        g.globalCompositeOperation = 'source-over';
+        g.fillStyle = `rgba(${BG},0.38)`; g.fillRect(0, 0, W, H);
+        g.globalCompositeOperation = 'lighter'; g.lineJoin = 'round';
+        const L = Math.min(190, Math.max(W, H) * .13); g.lineWidth = 1;
+        for (let i = 0; i < S.length; i++) for (let j = i + 1; j < S.length; j++) {
+          const a = S[i], b = S[j], d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (d < L) {
+            g.strokeStyle = `hsla(${hue + a.ho},80%,70%,${(1 - d / L) * .28})`;
+            g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+          }
+        }
+        for (const s of S) {
+          const hh = hue + s.ho, sp = Math.min(1, Math.hypot(s.vx, s.vy) * .12);
+          g.beginPath(); poly(s, 1, s.a);
+          if (s.fill) { g.fillStyle = `hsla(${hh},90%,60%,${.1 + sp * .25})`; g.fill(); }
+          g.strokeStyle = `hsla(${hh},90%,65%,${.18 * s.z})`; g.lineWidth = 6 * s.z; g.stroke();
+          g.strokeStyle = `hsla(${hh},95%,${70 + sp * 20}%,${.95 * s.z})`; g.lineWidth = 1.7 * s.z; g.stroke();
+          if (s.echo) { g.beginPath(); poly(s, .5, -s.a * 1.6); g.lineWidth = 1.1 * s.z; g.stroke(); }
+        }
+        drawRips();
+      }
+    };
+  })();
+
+  // ── TUNNEL — wireframe corridor that looks where you point ──
+  const tunnel = (() => {
+    const N = 24, SIDES = [6, 4, 3, 5, 8];
+    let phase = 0, twist = .9, sideI = 0, lx = 0, ly = 0, boost = 0; const pulses = [];
+    const V = Array.from({ length: N }, () => new Float32Array(18));
+    return {
+      name: 'Tunnel',
+      init() { lx = W / 2; ly = H / 2; },
+      tap(x, y, s) { pulses.push({ f: 1 }); boost = Math.min(3, boost + s * .8); },
+      shift() { sideI = (sideI + 1) % SIDES.length; },
+      draw(dt) {
+        const tx = ptr.seen ? ptr.x : W / 2 + Math.sin(t * 6) * W * .2, ty = ptr.seen ? ptr.y : H / 2 + Math.cos(t * 5) * H * .2;
+        lx += (tx + grav.x * W * .3 - lx) * .06 * dt; ly += (ty + grav.y * H * .3 - ly) * .06 * dt;
+        twist += ptr.vx * .0012; twist += (.9 - twist) * .01 * dt; twist = clamp(twist, -5, 5);
+        boost *= Math.pow(.97, dt);
+        phase = (phase + (.0022 + ptr.sp * .00006 + boost * .004) * dt) % 1;
+        for (let i = pulses.length - 1; i >= 0; i--) { pulses[i].f -= .014 * dt; if (pulses[i].f < -.1) pulses.splice(i, 1); }
+        g.globalCompositeOperation = 'source-over';
+        g.fillStyle = `rgb(${BG})`; g.fillRect(0, 0, W, H);
+        const diag = Math.hypot(W, H), sides = SIDES[sideI];
+        const vx = W / 2 + (lx - W / 2) * .85, vy = H / 2 + (ly - H / 2) * .85;
+        const gr = g.createRadialGradient(vx, vy, 0, vx, vy, diag * .35);
+        gr.addColorStop(0, `hsla(${hue + 120},90%,60%,.35)`); gr.addColorStop(1, 'hsla(0,0%,0%,0)');
+        g.fillStyle = gr; g.fillRect(0, 0, W, H);
+        g.globalCompositeOperation = 'lighter'; g.lineJoin = 'round';
+        const fr = k => ((1 - k / N - phase) % 1 + 1) % 1;       // 0 = at the viewer, 1 = far away
+        for (let k = 0; k < N; k++) {
+          const f = fr(k), z = .06 + f * .94, r = .07 * diag / z;
+          const cx = W / 2 + (lx - W / 2) * f * .85, cy = H / 2 + (ly - H / 2) * f * .85, rot = t * 4 + f * twist * 3;
+          for (let s = 0; s < sides; s++) { const a = rot + s / sides * TAU; V[k][s * 2] = cx + Math.cos(a) * r; V[k][s * 2 + 1] = cy + Math.sin(a) * r; }
+        }
+        for (let k = 0; k < N; k++) {
+          const f = fr(k); let glow = 0;
+          for (const p of pulses) glow = Math.max(glow, 1 - Math.abs(f - p.f) / .09);
+          const al = clamp((1 - f) * 1.5 + .1, 0, 1) * clamp(f / .05, 0, 1) * clamp((1 - f) / .08, 0, 1);
+          const v = V[k], col = `hsla(${hue + f * 130},90%,${62 + glow * 25}%,`;
+          g.beginPath();
+          for (let s = 0; s <= sides; s++) { const i = (s % sides) * 2; s ? g.lineTo(v[i], v[i + 1]) : g.moveTo(v[i], v[i + 1]); }
+          g.strokeStyle = col + (al * .2 + glow * .3) + ')'; g.lineWidth = (1 - f) * 12 + glow * 14 + 2; g.stroke();
+          g.strokeStyle = col + clamp(al + glow, 0, 1) + ')'; g.lineWidth = 1 + (1 - f) * 2 + glow * 2.5; g.stroke();
+          const n = V[(k + 1) % N], fn = fr((k + 1) % N);
+          if (fn > f) {
+            g.beginPath();
+            for (let s = 0; s < sides; s++) { g.moveTo(v[s * 2], v[s * 2 + 1]); g.lineTo(n[s * 2], n[s * 2 + 1]); }
+            g.strokeStyle = col + al * .45 + ')'; g.lineWidth = 1; g.stroke();
+          }
+        }
+      }
+    };
+  })();
+
+  // ── STARS — deep field: the pointer bends light and draws constellations; swipe fast to jump to warp ──
+  const stars = (() => {
+    let S = [], shots = [], neb = [], warp = 0;
+    const COL = ['#ffffff', '#a9c8ff', '#ffd9a8'];
+    const place = (s, centre) => {
+      if (centre) { const a = rnd(0, TAU), r = rnd(.02, .3) * Math.min(W, H); s.x = W / 2 + Math.cos(a) * r; s.y = H / 2 + Math.sin(a) * r; }
+      else { s.x = rnd(0, W); s.y = rnd(0, H); }
+    };
+    return {
+      name: 'Stars',
+      init() {
+        S = []; shots = []; warp = 0;
+        const n = clamp(W * H / 1300 | 0, 260, 1500);
+        for (let i = 0; i < n; i++) {
+          const z = .15 + .85 * Math.random() ** 2.4, q = Math.random();
+          const s = { z, r: .5 + z * 1.4, c: q < .68 ? 0 : q < .86 ? 1 : 2, tw: rnd(15, 60), ph: rnd(0, TAU), sx: 0, sy: 0 };
+          place(s); S.push(s);
+        }
+        S.sort((a, b) => a.c - b.c);
+        neb = [0, 1, 2, 3].map(i => ({ x: rnd(.1, .9), y: rnd(.1, .9), r: rnd(.3, .55), ho: i * 55 - 40, ph: rnd(0, TAU) }));
+      },
+      tap(x, y, s) {
+        for (let k = 0, n = s >= 2 ? 6 : 1; k < n; k++) {
+          const a = rnd(0, TAU), v = rnd(9, 16); shots.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1 });
+        }
+        if (s >= 2) warp = Math.max(warp, 1.5);
+      },
+      draw(dt) {
+        warp += clamp((ptr.sp - 24) * .004, 0, .08); warp = Math.min(warp, 2) * Math.pow(.962, dt);
+        if (Math.random() < .006 * dt) shots.push({ x: rnd(0, W), y: rnd(0, H * .5), vx: rnd(6, 12) * (Math.random() < .5 ? -1 : 1), vy: rnd(2, 6), life: 1 });
+        g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
+        g.fillStyle = '#03040a'; g.fillRect(0, 0, W, H);
+        g.globalCompositeOperation = 'lighter';
+        const pxo = ((ptr.seen ? ptr.x : W / 2) - W / 2) / W + grav.x * .5, pyo = ((ptr.seen ? ptr.y : H / 2) - H / 2) / H + grav.y * .5;
+        const M = Math.max(W, H);
+        for (const nb of neb) {
+          const x = (nb.x + .07 * Math.sin(t * 3 + nb.ph)) * W - pxo * 25, y = (nb.y + .07 * Math.cos(t * 2.3 + nb.ph)) * H - pyo * 25;
+          const gr = g.createRadialGradient(x, y, 0, x, y, nb.r * M);
+          gr.addColorStop(0, `hsla(${hue + nb.ho},80%,45%,.17)`); gr.addColorStop(1, 'hsla(0,0%,0%,0)');
+          g.fillStyle = gr; g.fillRect(0, 0, W, H);
+        }
+        const near = [], cx = W / 2, cy = H / 2;
+        for (const s of S) {
+          if (warp > .02) { s.x += (s.x - cx) * warp * .035 * s.z * dt; s.y += (s.y - cy) * warp * .035 * s.z * dt; }
+          s.x -= .06 * s.z * dt;
+          if (s.x < -12 || s.x > W + 12 || s.y < -12 || s.y > H + 12) { place(s, warp > .3); if (warp <= .3) s.x = W + 10; }
+          let x = s.x - pxo * 60 * s.z, y = s.y - pyo * 60 * s.z;
+          if (ptr.seen) {
+            const dx = x - ptr.x, dy = y - ptr.y, d = Math.hypot(dx, dy) || 1;
+            if (d < 150) {
+              const f = (1 - d / 150) * ptr.glow; x += dx / d * f * 14; y += dy / d * f * 14;
+              if (s.z > .5 && near.length < 90) near.push(x, y, f);
+            }
+          }
+          s.sx = x; s.sy = y;
+        }
+        if (warp > .05) {
+          g.lineWidth = 1.2; g.globalAlpha = Math.min(.8, warp);
+          for (let b = 0; b < 3; b++) {
+            g.strokeStyle = COL[b]; g.beginPath();
+            for (const s of S) if (s.c === b) { g.moveTo(s.sx, s.sy); g.lineTo(s.sx - (s.sx - cx) * warp * .14 * s.z, s.sy - (s.sy - cy) * warp * .14 * s.z); }
+            g.stroke();
+          }
+        }
+        let cur = -1;
+        for (const s of S) {
+          if (s.c !== cur) { cur = s.c; g.fillStyle = COL[cur]; }
+          const a = (.5 + .5 * Math.sin(t * 900 / s.tw + s.ph)) * .6 + .4;
+          g.globalAlpha = a * (.3 + .7 * s.z);
+          if (s.r < 1.15) g.fillRect(s.sx - s.r / 2, s.sy - s.r / 2, s.r, s.r);
+          else { g.beginPath(); g.arc(s.sx, s.sy, s.r * .62, 0, TAU); g.fill(); }
+          if (s.z > .88) { const L = s.r * 4.5 * a; g.globalAlpha = a * .45; g.fillRect(s.sx - L, s.sy - .4, L * 2, .8); g.fillRect(s.sx - .4, s.sy - L, .8, L * 2); }
+        }
+        g.globalAlpha = 1; g.lineWidth = .8;
+        for (let i = 0; i < near.length; i += 3) for (let j = i + 3; j < near.length; j += 3) {
+          const d = Math.hypot(near[i] - near[j], near[i + 1] - near[j + 1]);
+          if (d < 80) {
+            g.strokeStyle = `rgba(190,215,255,${Math.min(near[i + 2], near[j + 2]) * (1 - d / 80) * 1.1})`;
+            g.beginPath(); g.moveTo(near[i], near[i + 1]); g.lineTo(near[j], near[j + 1]); g.stroke();
+          }
+        }
+        g.lineWidth = 1.6; g.lineCap = 'round';
+        for (let i = shots.length - 1; i >= 0; i--) {
+          const s = shots[i]; s.x += s.vx * dt; s.y += s.vy * dt; s.life -= .014 * dt;
+          if (s.life <= 0) { shots.splice(i, 1); continue; }
+          const gr = g.createLinearGradient(s.x, s.y, s.x - s.vx * 9, s.y - s.vy * 9);
+          gr.addColorStop(0, `rgba(255,255,255,${s.life})`); gr.addColorStop(1, 'rgba(255,255,255,0)');
+          g.strokeStyle = gr; g.beginPath(); g.moveTo(s.x, s.y); g.lineTo(s.x - s.vx * 9, s.y - s.vy * 9); g.stroke();
+        }
+        drawRips();
+      }
+    };
+  })();
+
+  // ── KALEIDO — your gestures paint an eight-fold mandala that zooms away ──
+  const kaleido = (() => {
+    const N = 8; let px = 0, py = 0, has = false, src = 0, gh = rnd(0, 50);
+    const seg = (x0, y0, x1, y1, w, col) => {
+      const cx = W / 2, cy = H / 2; g.strokeStyle = col; g.lineWidth = w; g.beginPath();
+      for (let k = 0; k < N; k++) {
+        const a = k * TAU / N, ca = Math.cos(a), sa = Math.sin(a);
+        for (let m = -1; m <= 1; m += 2) {
+          const ax = x0 - cx, ay = (y0 - cy) * m, bx = x1 - cx, by = (y1 - cy) * m;
+          g.moveTo(cx + ax * ca - ay * sa, cy + ax * sa + ay * ca); g.lineTo(cx + bx * ca - by * sa, cy + bx * sa + by * ca);
+        }
+      }
+      g.stroke();
+    };
+    return {
+      name: 'Kaleido',
+      init() { has = false; },
+      tap(x, y, s) {
+        g.globalCompositeOperation = 'lighter'; g.lineCap = 'round';
+        for (let j = 0; j < 6; j++) { const a = j / 6 * TAU + t * 20; seg(x, y, x + Math.cos(a) * 34 * s, y + Math.sin(a) * 34 * s, 2.5, `hsla(${hue + 150},95%,70%,.9)`); }
+      },
+      draw(dt) {
+        const cv = g.canvas;
+        g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over';
+        g.translate(cv.width / 2, cv.height / 2); g.rotate(.003 * dt); g.scale(1.007, 1.007);
+        g.drawImage(cv, -cv.width / 2, -cv.height / 2); g.restore();
+        g.globalCompositeOperation = 'source-over';
+        g.fillStyle = `rgba(${BG},0.04)`; g.fillRect(0, 0, W, H);
+        g.globalCompositeOperation = 'lighter'; g.lineCap = 'round';
+        const live = ptr.seen && ptr.glow > .35; let x, y;
+        if (live) { x = ptr.x; y = ptr.y; }
+        else { gh += .018 * dt; x = W / 2 + Math.cos(gh * 1.3) * W * .32 * Math.sin(gh * .31); y = H / 2 + Math.sin(gh * 1.7) * H * .32 * Math.cos(gh * .23); }
+        if (src !== +live) { src = +live; has = false; }
+        const d = Math.hypot(x - px, y - py);
+        if (has && d > .3 && d < 260) seg(px, py, x, y, clamp(1.5 + d * .12, 1.5, 7), `hsla(${hue + Math.hypot(x - W / 2, y - H / 2) * .3},95%,62%,.85)`);
+        px = x; py = y; has = true;
+      }
+    };
+  })();
+
+  // ═════════════════════════ MONOCHROME ═════════════════════════
+
+  // ── SEQUINS — a wall of cut diamonds: swipe one way to flip them bright, the other way to flip them dark ──
+  const sequins = (() => {
+    let s, hs, Dm = [];
+    return {
+      name: 'Sequins', mono: true,
+      init() {
+        s = clamp(Math.max(W, H) / 24, 40, 84); hs = s / 2; Dm = [];
+        for (let j = 0; j * hs <= H + hs; j++) for (let i = 0; i * s + (j & 1 ? hs : 0) <= W + hs; i++)
+          Dm.push({ x: i * s + (j & 1 ? hs : 0), y: j * hs, a: 0, va: 0, tg: 0, gl: 0, lr: null });
+      },
+      draw(dt) {
+        black(); const R = s * 2.1, dir = Math.abs(ptr.vx) > Math.abs(ptr.vy) ? ptr.vx : ptr.vy, k = Math.pow(.84, dt);
+        if (Math.random() < .1 * dt) Dm[Math.random() * Dm.length | 0].gl = 1;
+        const lx = ptr.seen ? ptr.x : W / 2, ly = ptr.seen ? ptr.y : H / 2;
+        for (const d of Dm) {
+          const dx = d.x - ptr.x, dy = d.y - ptr.y;
+          if (ptr.seen && ptr.sp > 1.5 && dx * dx + dy * dy < R * R) d.tg = dir > 0 ? PI : 0;
+          for (const r of rip) if (r.s > .25 && d.lr !== r && Math.abs(Math.hypot(d.x - r.x, d.y - r.y) - r.r) < 14) { d.lr = r; d.tg = d.tg ? 0 : PI; }
+          d.va = (d.va + (d.tg - d.a) * .09 * dt) * k; d.a += d.va * dt;
+          const c = Math.cos(d.a), front = c > 0, e = 1 - Math.abs(c), w = hs * .94 * Math.abs(c), h = hs * .94;
+          // light comes from the pointer: facets facing it are brighter
+          const ux = clamp((lx - d.x) / 500, -1, 1), uy = clamp((ly - d.y) / 500, -1, 1);
+          const base = front ? 10 + e * e * 55 : 84 - e * 30, amp = front ? 7 : 11;
+          const f = (sx, sy) => GREY[clamp(base + amp * (sx * ux + sy * uy) + (sx - sy) * 2 + d.gl * 30, 0, 100) | 0];
+          if (w < .6) { g.fillStyle = GREY[90]; g.fillRect(d.x - .6, d.y - h, 1.2, h * 2); }
+          else {
+            const tri = (x1, y1, x2, y2, col) => { g.fillStyle = col; g.beginPath(); g.moveTo(d.x, d.y); g.lineTo(x1, y1); g.lineTo(x2, y2); g.fill(); };
+            tri(d.x, d.y - h, d.x + w, d.y, f(1, -1)); tri(d.x + w, d.y, d.x, d.y + h, f(1, 1));
+            tri(d.x, d.y + h, d.x - w, d.y, f(-1, 1)); tri(d.x - w, d.y, d.x, d.y - h, f(-1, -1));
+          }
+          if (d.gl > .03) {
+            const L = hs * .9 * d.gl; g.fillStyle = `rgba(255,255,255,${d.gl})`;
+            g.fillRect(d.x - L, d.y - .6, L * 2, 1.2); g.fillRect(d.x - .6, d.y - L, 1.2, L * 2); d.gl *= Math.pow(.92, dt);
+          }
+        }
+      }
+    };
+  })();
+
+  // ── GEM — one brilliant-cut diamond: drag to spin it, tap to shatter it into facets ──
+  const gem = (() => {
+    const V = [], Fc = [];
+    for (let k = 0; k < 8; k++) { const a = k / 8 * TAU; V.push([Math.cos(a) * .6, -.58, Math.sin(a) * .6]); }      // table 0–7
+    for (let k = 0; k < 16; k++) { const a = k / 16 * TAU; V.push([Math.cos(a), -.1, Math.sin(a)]); }                // girdle 8–23
+    V.push([0, 1.05, 0], [0, -.58, 0]);                                                                               // culet 24, table centre 25
+    for (let k = 0; k < 8; k++) {
+      const n = (k + 1) % 8, g0 = 8 + 2 * k, g1 = g0 + 1, g2 = 8 + (2 * k + 2) % 16;
+      Fc.push([25, k, n], [k, g0, g1], [k, g1, n], [n, g1, g2]);
+    }
+    for (let j = 0; j < 16; j++) Fc.push([8 + j, 24, 8 + (j + 1) % 16]);
+    const FR = Fc.map(() => rnd(.5, 1.5)), RV = V.map(() => [0, 0, 0]), order = Fc.map((_, i) => i), FZ = new Float32Array(Fc.length);
+    const nrm = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+    const L = nrm([-.45, -.65, -.6]), Hv = nrm([L[0], L[1], L[2] - 1]);
+    let yaw = 0, yo = 0, pitch = .3, spin = 0, e = 0, ev = 0, dust = [];
+    return {
+      name: 'Gem', mono: true,
+      init() { dust = Array.from({ length: clamp(W * H / 16000 | 0, 30, 110) }, () => ({ x: rnd(0, W), y: rnd(0, H), vx: 0, vy: 0, r: rnd(1, 3.2), ph: rnd(0, TAU) })); },
+      tap(x, y, s) { ev = Math.min(.3, ev + .12 * s); },
+      draw(dt) {
+        black();
+        if (ptr.seen) spin += ptr.vx * .0006; spin *= Math.pow(.97, dt); spin = clamp(spin, -.4, .4); yaw += (.006 + spin) * dt;
+        yo += (((ptr.seen ? ptr.x : W / 2) / W - .5) * 1.3 + grav.x - yo) * .06 * dt;
+        pitch += (.3 + ((ptr.seen ? ptr.y : H / 2) / H - .5) * 1.3 + grav.y * .5 - pitch) * .06 * dt;
+        ev = (ev - e * .09 * dt) * Math.pow(.88, dt); e = Math.min(1.1, e + ev * dt); if (e < 0) { e = 0; ev = -ev * .4; }
+        const sc = Math.min(W, H) * .31, cx = W / 2, cy = H / 2 - sc * .12;
+        let gr = g.createRadialGradient(cx, cy, 0, cx, cy, sc * 2.4);
+        gr.addColorStop(0, 'rgba(255,255,255,.1)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = gr; g.fillRect(0, 0, W, H);
+        g.globalCompositeOperation = 'lighter';
+        for (const d of dust) {                                   // diamond dust
+          ripForce(d.x, d.y, F); d.vx = (d.vx + F[0] * .5 + grav.x * .02) * .96; d.vy = (d.vy + F[1] * .5 - .004) * .96;
+          d.x += d.vx * dt; d.y += (d.vy - .12) * dt; if (d.y < -5) { d.y = H + 5; d.x = rnd(0, W); }
+          const a = .25 + .75 * Math.abs(Math.sin(t * 40 + d.ph)); g.fillStyle = `rgba(255,255,255,${a * .5})`;
+          g.beginPath(); g.moveTo(d.x, d.y - d.r); g.lineTo(d.x + d.r, d.y); g.lineTo(d.x, d.y + d.r); g.lineTo(d.x - d.r, d.y); g.fill();
+        }
+        g.globalCompositeOperation = 'source-over';
+        const cyw = Math.cos(yaw + yo), syw = Math.sin(yaw + yo), cp = Math.cos(pitch), sp = Math.sin(pitch);
+        for (let i = 0; i < V.length; i++) {
+          const v = V[i], x = v[0] * cyw + v[2] * syw, z = -v[0] * syw + v[2] * cyw;
+          RV[i][0] = x; RV[i][1] = v[1] * cp - z * sp; RV[i][2] = v[1] * sp + z * cp;
+        }
+        for (let i = 0; i < Fc.length; i++) { const f = Fc[i]; FZ[i] = RV[f[0]][2] + RV[f[1]][2] + RV[f[2]][2]; }
+        order.sort((a, b) => FZ[b] - FZ[a]);
+        g.lineJoin = 'round'; g.lineWidth = .8; const glints = [];
+        for (const i of order) {
+          const f = Fc[i], A = RV[f[0]], B = RV[f[1]], C = RV[f[2]];
+          let n = nrm([(B[1] - A[1]) * (C[2] - A[2]) - (B[2] - A[2]) * (C[1] - A[1]),
+                       (B[2] - A[2]) * (C[0] - A[0]) - (B[0] - A[0]) * (C[2] - A[2]),
+                       (B[0] - A[0]) * (C[1] - A[1]) - (B[1] - A[1]) * (C[0] - A[0])]);
+          const mx = (A[0] + B[0] + C[0]) / 3, my = (A[1] + B[1] + C[1]) / 3 - .2, mz = (A[2] + B[2] + C[2]) / 3;
+          if (n[0] * mx + n[1] * my + n[2] * mz < 0) n = [-n[0], -n[1], -n[2]];
+          const off = e * FR[i], nl = n[0] * L[0] + n[1] * L[1] + n[2] * L[2], frontFace = n[2] < 0;
+          const spec = Math.pow(Math.max(0, n[0] * Hv[0] + n[1] * Hv[1] + n[2] * Hv[2]), 40) * 60;
+          const l = frontFace ? 9 + 62 * Math.pow(Math.max(0, nl), 1.3) + spec : 5 + 30 * Math.abs(nl);
+          g.beginPath(); let sx = 0, sy = 0;
+          for (let q = 0; q < 3; q++) {
+            const p = RV[f[q]], x = p[0] + n[0] * off, y = p[1] + n[1] * off, z = p[2] + n[2] * off, ps = 3.4 / (3.4 + z);
+            const X = cx + x * sc * ps, Y = cy + y * sc * ps; sx += X / 3; sy += Y / 3; q ? g.lineTo(X, Y) : g.moveTo(X, Y);
+          }
+          g.closePath();
+          g.fillStyle = `hsla(0,0%,${clamp(l, 0, 100) | 0}%,${frontFace ? .82 : .55})`; g.fill();
+          g.strokeStyle = `rgba(255,255,255,${frontFace ? .3 : .12})`; g.stroke();
+          if (frontFace && spec > 22) glints.push(sx, sy, spec);
+        }
+        g.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < glints.length; i += 3) {
+          const Lr = glints[i + 2] * sc * .005; g.fillStyle = `rgba(255,255,255,${Math.min(1, glints[i + 2] / 50)})`;
+          g.fillRect(glints[i] - Lr, glints[i + 1] - .7, Lr * 2, 1.4); g.fillRect(glints[i] - .7, glints[i + 1] - Lr, 1.4, Lr * 2);
+        }
+        drawRips();
+      }
+    };
+  })();
+
+  // ── HALFTONE — diamond-shaped dots that swell into light around the pointer ──
+  const halftone = (() => {
+    let sp;
+    return {
+      name: 'Halftone', mono: true,
+      init() { sp = clamp(Math.max(W, H) / 64, 13, 28); },
+      draw(dt) {
+        black(); g.fillStyle = '#fff'; g.beginPath();
+        const hs = sp / 2, on = ptr.seen ? ptr.glow : 0, sh = grav.x * 300;
+        for (let j = 0; j * hs <= H + hs; j++) for (let i = 0; i * sp <= W + sp; i++) {
+          const x = i * sp + (j & 1 ? hs : 0), y = j * hs;
+          let v = .3 + .22 * Math.sin((x + sh) * .007 + t * 12) * Math.cos(y * .009 - t * 9) + .18 * Math.sin((x + y) * .004 - t * 6);
+          if (on) { const d2 = (x - ptr.x) ** 2 + (y - ptr.y) ** 2; v += on * (.85 * Math.exp(-d2 / 57800) - .75 * Math.exp(-d2 / 3200)); }
+          for (const r of rip) { const off = Math.abs(Math.hypot(x - r.x, y - r.y) - r.r); if (off < 60) v += (1 - off / 60) * r.s * .5; }
+          const r = hs * clamp(v, 0, 1.03);
+          if (r > .5) { g.moveTo(x, y - r); g.lineTo(x + r, y); g.lineTo(x, y + r); g.lineTo(x - r, y); g.closePath(); }
+        }
+        g.fill();
+      }
+    };
+  })();
+
+  // ── MOIRÉ — two sets of rings interfere; one follows you, taps drop a third ──
+  const moire = (() => {
+    let ax = 0, ay = 0; const extra = [];
+    const set = (x, y, spc, maxR, alpha) => {
+      g.globalAlpha = alpha; g.lineWidth = spc * .5; g.beginPath();
+      for (let r = spc * .5; r < maxR; r += spc) { g.moveTo(x + r, y); g.arc(x, y, r, 0, TAU); }
+      g.stroke();
+    };
+    return {
+      name: 'Moiré', mono: true,
+      init() { ax = W / 2; ay = H / 2; },
+      tap(x, y) { extra.push({ x, y, life: 1 }); if (extra.length > 3) extra.shift(); },
+      draw(dt) {
+        black();
+        const sp = clamp(Math.max(W, H) / 110, 8, 16), diag = Math.hypot(W, H);
+        const tx = ptr.seen ? ptr.x : W / 2 + Math.sin(t * 6) * W * .25, ty = ptr.seen ? ptr.y : H / 2 + Math.cos(t * 4.4) * H * .25;
+        ax += (tx - ax) * .12 * dt; ay += (ty - ay) * .12 * dt;
+        g.globalCompositeOperation = 'difference'; g.strokeStyle = '#fff';
+        set(ax, ay, sp * (1 + .04 * Math.sin(t * 20)), diag, 1);
+        set(W / 2 + Math.cos(t * 4) * W * .22 + grav.x * W * .25, H / 2 + Math.sin(t * 5.3) * H * .22 + grav.y * H * .25, sp * 1.07, diag, 1);
+        for (let i = extra.length - 1; i >= 0; i--) {
+          const e = extra[i]; e.life -= .006 * dt; if (e.life <= 0) { extra.splice(i, 1); continue; }
+          set(e.x, e.y, sp * (.9 + (1 - e.life) * .7), diag * (1 - e.life) * 1.2 + 60, Math.min(1, e.life * 2));
+        }
+        g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+      }
+    };
+  })();
+
+  // ── RIDGES — stacked signal lines; the pointer is a mountain range that follows you ──
+  const ridges = (() => {
+    let gap, step;
+    return {
+      name: 'Ridges', mono: true,
+      init() { gap = clamp(H / 52, 12, 22); step = clamp(W / 130, 6, 14); },
+      draw(dt) {
+        black(); g.lineWidth = 1.3; g.lineJoin = 'round'; g.strokeStyle = '#fff'; g.fillStyle = '#000';
+        const mid = W / 2 + grav.x * W * .25, on = ptr.seen ? ptr.glow : 0;
+        for (let y0 = gap * 4, r = 0; y0 < H + gap * 3; y0 += gap, r++) {
+          const py = on * Math.exp(-((y0 - ptr.y - 20) ** 2) / 18000);
+          g.beginPath(); g.moveTo(-step * 2, H + 20);
+          for (let x = -step * 2; x <= W + step * 2; x += step) {
+            const e = .22 + .78 * Math.exp(-(((x - mid) / (W * .3)) ** 2));
+            const nz = Math.sin(x * .013 + r * .9 + t * 22) + Math.sin(x * .031 - t * 17 + r * 1.7) * .6 + Math.sin(x * .0057 + t * 7 + r * .37) * 1.2;
+            let a = nz * nz * 3.4 * e;
+            if (py > .01) a += py * Math.exp(-((x - ptr.x) ** 2) / 28800) * (58 + 20 * Math.sin(x * .09 + t * 60 + r));
+            for (const rp of rip) { const off = Math.abs(Math.hypot(x - rp.x, y0 - rp.y) - rp.r); if (off < 55) a += (1 - off / 55) * rp.s * 22; }
+            g.lineTo(x, y0 - a);
+          }
+          g.lineTo(W + step * 2, H + 20); g.closePath(); g.fill(); g.stroke();
+        }
+      }
+    };
+  })();
+
+  // ═════════════════════════ engine ═════════════════════════
+  const MODES = [flow, liquid, lava, shards, tunnel, stars, kaleido, sequins, gem, halftone, moire, ridges];
+  const embedded = window.__mode != null;                       // running inside the Mac app
+  if (embedded) document.documentElement.classList.add('embedded');
+  let mi = 0, toastT = 0;
+  const store = { get: () => { try { return localStorage.getItem('wp-mode'); } catch (e) { return null; } },
+                  set: v => { try { localStorage.setItem('wp-mode', v); } catch (e) {} } };
+  const wipe = () => { g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.fillStyle = `rgb(${BG})`; g.fillRect(0, 0, W, H); };
+
+  function setMode(i, quiet) {
+    mi = ((i % MODES.length) + MODES.length) % MODES.length; mode = MODES[mi]; store.set(mi);
+    rip.length = 0; wipe(); mode.init();
+    cards.forEach((cd, k) => cd.el.classList.toggle('sel', k === mi));
+    if (!quiet) { toast.textContent = mode.name; toast.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => toast.classList.remove('on'), 1400); }
+  }
+
+  function resize() {
+    D = Math.min(window.devicePixelRatio || 1, 1.5);
+    W = innerWidth; H = innerHeight;
+    c.width = Math.round(W * D); c.height = Math.round(H * D);
+    g.setTransform(D, 0, 0, D, 0, 0);
+    wipe(); mode.init(); thumbsFor = '';
+    if (gal.classList.contains('on')) queueThumbs();
+  }
+
+  // Hooks: the Mac app calls these; the page calls them itself for touch and mouse.
+  const api = window.wallpaper = {
+    modes: MODES.map(m => m.name),
+    setMode, next: () => setMode(mi + 1),
+    move(x, y) { if (!ptr.seen) { ptr.x = x; ptr.y = y; ptr.seen = true; } ptr.tx = x; ptr.ty = y; ptr.glow = 1; },
+    tap(x, y, s = 1) { rip.push({ x, y, r: 0, s: 1.6 * s }); hueT += 14; mode.tap && mode.tap(x, y, s); },
+    bloom() {                       // unlock / wake / app reopened
+      api.tap(W / 2, H / 2, 2); setTimeout(() => api.tap(W / 2, H / 2, 1.3), 220);
+      flash = 1; hueT += 60;
+    },
+    shift() {                       // something changed on screen (app or desktop switch)
+      hueT += 45; api.tap(rnd(0, W), rnd(0, H), .7); mode.shift && mode.shift();
+    }
+  };
+
+  // ── gallery ──
+  const cards = MODES.map((m, i) => {
+    const el = document.createElement('button'); el.className = 'card';
+    const cv = document.createElement('canvas'), sp = document.createElement('span'); sp.textContent = m.name;
+    el.append(cv, sp); el.addEventListener('click', () => { setMode(i); closeGallery(); });
+    document.getElementById(m.mono ? 'gm' : 'gc').append(el);
+    return { el, cv };
+  });
+  let queue = [], thumbsFor = '';
+  function queueThumbs() {
+    const key = W + 'x' + H; if (thumbsFor === key) return; thumbsFor = key;
+    const tw = W > H ? 420 : 250, th = Math.round(tw * H / W);
+    document.querySelectorAll('.grid').forEach(el => el.style.setProperty('--min', W > H ? '200px' : '104px'));
+    cards.forEach(cd => { cd.cv.width = tw; cd.cv.height = th; });
+    queue = MODES.map((_, i) => i);
+  }
+  function renderThumb(i) {                                     // run the wallpaper briefly into its card
+    const m = MODES[i], sg = g, sW = W, sH = H, sm = mode, st = t, sp = Object.assign({}, ptr), sr = rip.splice(0);
+    g = cards[i].cv.getContext('2d'); W = g.canvas.width; H = g.canvas.height; mode = m;
+    wipe(); m.init(); Object.assign(ptr, { seen: true, glow: 1, x: W * .2, y: H * .65, vx: 0, vy: 0, sp: 0 });
+    for (let f = 0; f < 80; f++) {
+      const u = f / 80, x = W * (.2 + .6 * u), y = H * (.65 - .3 * Math.sin(u * 3.1));
+      ptr.vx = x - ptr.x; ptr.vy = y - ptr.y; ptr.sp = Math.hypot(ptr.vx, ptr.vy); ptr.x = x; ptr.y = y; t += .0011;
+      stepRips(1);
+      if (f === 40) { rip.push({ x: W * .5, y: H * .45, r: 0, s: 1.6 }); m.tap && m.tap(W * .5, H * .45, 1); }
+      m.draw(1);
+    }
+    g = sg; W = sW; H = sH; mode = sm; t = st; Object.assign(ptr, sp); rip.length = 0; rip.push(...sr);
+  }
+  function openGallery() { gal.classList.add('on'); queueThumbs(); }
+  function closeGallery() { gal.classList.remove('on'); }
+  document.getElementById('btn').addEventListener('click', openGallery);
+  document.getElementById('x').addEventListener('click', closeGallery);
+  api.gallery = openGallery;
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (innerWidth !== W || innerHeight !== H) resize();
+    if (queue.length) {                                          // paint gallery cards one per frame
+      renderThumb(queue.shift());
+      if (!queue.length) { wipe(); mode.init(); }
+      last = now; return;
+    }
+    const dt = clamp((now - last) / 16.67 || 1, .2, 2.5); last = now;
+    t += .0011 * dt;
+    hueT += .012 * dt; hue += (hueT - hue) * .025 * dt;
+    const ox = ptr.x, oy = ptr.y;
+    ptr.x += (ptr.tx - ptr.x) * .4; ptr.y += (ptr.ty - ptr.y) * .4;
+    ptr.vx = ptr.x - ox; ptr.vy = ptr.y - oy; ptr.sp = Math.hypot(ptr.vx, ptr.vy);
+    ptr.glow *= Math.pow(.99, dt);
+    stepRips(dt);
+    mode.draw(dt);
+    if (flash > .01) {
+      g.globalCompositeOperation = 'lighter';
+      g.fillStyle = mode.mono ? `rgba(255,255,255,${flash * .1})` : `hsla(${hue},90%,65%,${flash * .12})`; g.fillRect(0, 0, W, H);
+      flash *= Math.pow(.93, dt);
+    }
+  }
+
+  // ── browser input: mouse, touch, tilt, unlock ──
+  const touches = new Set();
+  c.addEventListener('pointermove', e => api.move(e.clientX, e.clientY));
+  c.addEventListener('pointerdown', e => {
+    touches.add(e.pointerId);
+    if (touches.size === 2) { openGallery(); return; }           // two-finger tap = gallery
+    ptr.seen = false; api.move(e.clientX, e.clientY); api.tap(e.clientX, e.clientY);
+  });
+  const up = e => touches.delete(e.pointerId);
+  addEventListener('pointerup', up); addEventListener('pointercancel', up);
+  addEventListener('click', () => {                              // iOS only allows tilt after a tap
+    const DO = window.DeviceOrientationEvent;
+    if (DO && DO.requestPermission) DO.requestPermission().catch(() => {});
+  }, { once: true });
+  addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ') api.next();
+    else if (e.key === 'ArrowLeft') setMode(mi - 1);
+    else if (e.key === 'g') gal.classList.contains('on') ? closeGallery() : openGallery();
+    else if (e.key === 'Escape') closeGallery();
+  });
+  addEventListener('deviceorientation', e => {
+    if (e.gamma == null) return;
+    grav.x = clamp(e.gamma / 35, -1, 1); grav.y = clamp((e.beta - 40) / 35, -1, 1);
+  });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { last = performance.now(); api.bloom(); } });
+  addEventListener('resize', resize);
+
+  const start = embedded ? +window.__mode : location.hash.length > 1 ? +location.hash.slice(1) - 1 : +(store.get() || 0);
+  mi = clamp(start | 0, 0, MODES.length - 1); mode = MODES[mi];
+  cards[mi].el.classList.add('sel');
+  resize();
+  requestAnimationFrame(frame);
+  setTimeout(api.bloom, 300);
+})();
+</script>
+</body>
+</html>
